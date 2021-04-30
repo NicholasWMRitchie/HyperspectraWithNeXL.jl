@@ -1,0 +1,155 @@
+# Fitting K2496 using Fitting and Quantification standards
+We will consider the process of fitting K2496 using only fitting standards and then two different ways using similar quantification standards.
+```julia
+# Load DrWatson project manager and enable custom environment
+using DrWatson
+@quickactivate("HyperspectraWithNeXL")
+# Load the necessary NeXL libraries
+using NeXLSpectrum
+
+# Load 3rd party libraries for plotting and tabulation
+using Gadfly, DataFrames
+ENV["columns"]=400
+```
+
+The material we are going to measure is a NIST-engineered glass containing Ba, Si, O and a small amount of Ti. The Ti K-lines are hidden by the Ba L-lines.
+```julia
+k2496_mat = parse(Material,"0.323*O+0.2291*Si+0.018*Ti+0.4299*Ba",name="K2496 nominal")
+```
+
+#### Build the detector
+This detector has 4096 channels, a -480 eV zero offset, 5 eV/channels, a resolution of 132.0 at Mn Kα and a low-level discriminator of 110 channels.
+The detector is sensitive to all elements B and above B for the K-shell, Ca and above for the L-shell and Cs and above for the M-shell X-rays. 
+```julia
+det = BasicEDS(4096, -480.40409, 5.00525, 132.0, 110, 
+         Dict(KShell=>n"B", LShell=>n"Ca", MShell=>n"Cs"))
+```
+
+```julia; fig_width=8; fig_height=3; fig_ext=".svg"
+path = joinpath(datadir(),"exp_raw","K2496")
+# Read the spectra from disk and apply the detector
+k2496 = loadspectrum.(joinpath(path,"K2496_$(i).msa") for i in 1:3)
+k2496 = map(s->apply(s,det), k2496)
+# Plot them using a method of Gadfly.plot(...) specialized for Spectrum items
+plot(k2496..., klms=[ n"O", n"Si", n"Ti", n"Ba" ], xmax=6.0e3)
+```
+
+## Method 1: Simple Fitting standards
+This section will use BaCl₂, Si, MgO and Ti as both fitting and quantification standards.
+
+#### Fitting standards
+This block reads in the fitting standards and filters then in preparation for fitting them to the K2496 spectra.
+```julia
+refs = references([
+  reference(n"Si", joinpath(path,"Si std.msa"), mat"Si"),
+  reference(n"Ba", joinpath(path,"BaCl2 std.msa"), mat"BaCl2"),
+  reference(n"O", joinpath(path,"MgO std.msa"), mat"MgO"),
+  reference(n"C", joinpath(path,"C std.msa"), mat"C"),
+  reference(n"Ti", joinpath(path,"Ti std.msa"), mat"Ti") ], det)
+asa(DataFrame, refs)
+```
+#### K-ratios
+Fit the filtered fitting standards to the unknowns to extract the k-ratios. 
+```julia; fig_width=8; fig_height=3; fig_ext=".svg"
+fs=fit_spectrum(k2496, refs)
+plot(fs[1])
+```
+Tabulate the k-ratios and then summarize using the `describe(...)` function.
+```julia
+describe(asa(DataFrame, fs)[:, 2:end], :mean, :std)
+```
+
+#### Carbon Coating Thickness
+```julia
+map(i->k2496[i][:Coating] = coatingasfilm(XPP, k2496_mat, parse(Material, "C", density=2.0), n"C K-L2", 10.0e3, k2496[i][:TakeOffAngle], value(kratio(fs[i], n"C K-L2"))), eachindex(k2496)) 
+```
+
+#### Quantification
+Apply matrix correction algorithm (XPP by default) and tabulate the results comparing them with the nominal value.
+```julia
+q=quantify.(fs)
+asa(DataFrame, q, nominal=k2496_mat)
+```
+
+For additional details about the entire measurement process including matrix correction factors, tabulate a single result item.
+Quantification details
+```julia
+asa(DataFrame, q[1])
+```
+
+## Method 2: Use Benitoite for Quantification
+We are going to use the same fitting standards we used above but this time fit Benitoite.  This means that we can use the k-ratios from Benitoite to restandardize the K2496.
+```julia; fig_width=8; fig_height=3; fig_ext=".svg"
+benitoite = apply(loadspectrum(joinpath(path,"Benitoite std.msa")),det)
+fs_benitoite = fit_spectrum(benitoite, refs)
+plot(fs_benitoite)
+```
+
+#### Carbon Coating Thickness
+```julia
+benitoite_mat = parse(Material, "BaTiSi3O9", name="Benitoite")
+benitoite[:Coating] = coatingasfilm(XPP, benitoite_mat, parse(Material, "C", density=2.0), n"C K-L2", 10.0e3, benitoite[:TakeOffAngle], value(kratio(fs_benitoite, n"C K-L2"))) 
+```
+
+#### Restandardize using Benitoite
+Benitoite contains all the same elements as K2496 so every element in K2496 can be restandardized using Benitoite.
+```julia
+fs_restd1 = standardize(fs, fs_benitoite, benitoite_mat)
+describe(asa(DataFrame, fs_restd1)[:, 2:end], :mean, :std)
+```
+
+#### Quantify K2496 Against Benitoite 
+Apply matrix correction algorithm (XPP by default) and tabulate the results comparing them with the nominal value.
+```julia
+q_restd1=quantify.(fs_restd1)
+asa(DataFrame, q_restd1, nominal=k2496_mat)
+```
+
+## Method 3: Use Sanbornite to Fit
+This is a little bit subtle but we are going to use slightly different fitting standards.  We will specify two different fitting standards for Ba.  
+However, Sanbornite (BaSi₂O₅) is only suitable for the Ba L-lines since O interferes with the Ba M-lines.  Preference is given to the first reference
+containing an element.  So `refs` will use a reference from Sanbornite for the Ba L-lines and from BaCl₂ for the remaining M-lines.
+```julia
+refs2 = references([
+  reference(n"Si", joinpath(path,"Si std.msa"), mat"Si"),
+  reference(n"Ba", joinpath(path,"Sanbornite std.msa"), mat"BaSi2O5"),
+  reference(n"Ba", joinpath(path,"BaCl2 std.msa"), mat"BaCl2"),
+  reference(n"O", joinpath(path,"MgO std.msa"), mat"MgO"),
+  reference(n"C", joinpath(path,"C std.msa"), mat"C"),
+  reference(n"Ti", joinpath(path,"Ti std.msa"), mat"Ti") ], det)
+asa(DataFrame, refs2)
+```
+We will refit the K2496 spectra and the Benitoite spectra using the new fitting standards.
+```julia
+fs2 = fit_spectrum(k2496, refs2)
+fs2_benitoite = fit_spectrum(benitoite, refs2)
+fs_restd2 = standardize(fs2, fs2_benitoite, benitoite_mat)
+describe(asa(DataFrame, fs_restd2)[:, 2:end], :mean, :std)
+```
+The residual looks really clean around Ba L and Ti K. Slightly better than when using BaCl₂ as a standard.
+```julia; fig_width=8; fig_height=3; fig_ext=".svg"
+plot(fs_restd2[1])
+```
+The quantification results for Ba and Ti are excellent but Si and O are less good.
+```julia
+q_restd2=quantify.(fs_restd2)
+asa(DataFrame, q_restd2, nominal=k2496_mat)
+```
+
+Using the O-by-stoichiometry stragegy to estimate the O mass-fraction still gives a low O content.
+```julia
+q_restd2o=quantify.(fs_restd2, unmeasured=OByStoichiometry())
+asa(DataFrame, q_restd2o, nominal=k2496_mat)
+```
+However, if we force C(Si) = 0.2291 and use O by stoichiometry, everything looks good. 
+```julia
+q_restd2o=quantify.(fs_restd2, unmeasured=MultiUnmeasuredElementRule([ElementByFiat(n"Si",0.2291), OByStoichiometry()]))
+asa(DataFrame, q_restd2o, nominal=k2496_mat)
+```
+
+Compare this to forcing Si and measuring O.
+```julia
+q_restd2o=quantify.(fs_restd2, unmeasured=ElementByFiat(n"Si",0.2291))
+asa(DataFrame, q_restd2o, nominal=k2496_mat)
+```
+NWMR

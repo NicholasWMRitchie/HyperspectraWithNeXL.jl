@@ -1,0 +1,133 @@
+## Filter fitting a hyper-spectral data set
+In this script, we will load a hyper-spectrum from a RPL/RAW file to
+construct a HyperSpectrum, we will load reference spectra which we will
+use to extract k-ratios from the data.  We will cluster the data based
+on the normalized k-ratios and then plot the results as a colorized
+image and as sum spectra for each cluster.
+
+First, load the necessary libraries.
+```julia
+using DrWatson
+@quickactivate("HyperspectraWithNeXL")
+
+using NeXLSpectrum
+using NeXLParticle
+using DataFrames
+using Images
+using FileIO
+using Gadfly
+using LinearAlgebra
+```
+The read in the data from the RPL/RAW file.
+```julia
+path = joinpath(datadir(), "exp_raw","Mn Nodule")
+
+lt = 0.70*4.0*18.0*3600.0/(1024*1024) # 18.0 hours on 4 detectors
+hs = NeXLSpectrum.compress(HyperSpectrum(
+    LinearEnergyScale(0.0,10.0),
+    Dict{Symbol,Any}(:ProbeCurrent => 1.0, :LiveTime => lt, :BeamEnergy => 20.0e3, :Name => splitdir(path)[2]),
+    readrplraw(joinpath(path,"map[15]"))
+));
+```
+
+Next read in the reference spectra that will be used to extract the k-ratios
+from the HyperSpectrum.
+```julia
+refpath = joinpath(path, "Standards")
+
+refs = references( [
+    reference(n"Ag", joinpath(refpath, "Ag std.msa") ),
+    reference(n"Al", joinpath(refpath, "Al std.msa") ),
+    reference(n"C", joinpath(refpath, "C std.msa") ),
+    reference(n"Ca", joinpath(refpath, "CaF2 std.msa") ),
+    reference(n"Ce", joinpath(refpath, "CeO2 std.msa") ),
+    reference(n"Cr", joinpath(refpath, "Cr std.msa") ),
+    reference(n"Cu", joinpath(refpath, "Cu std.msa") ),
+    reference(n"Fe", joinpath(refpath, "Fe std.msa") ),
+    reference(n"S", joinpath(refpath, "FeS2 std.msa") ),
+    reference(n"P", joinpath(refpath, "GaP std.msa") ),
+    reference(n"K", joinpath(refpath, "KBr std.msa") ),
+    reference(n"Mg", joinpath(refpath, "Mg std.msa") ),
+    reference(n"O", joinpath(refpath, "MgO std.msa") ),
+    reference(n"Mn", joinpath(refpath, "Mn std.msa") ),
+    reference(n"Na", joinpath(refpath, "NaCl std.msa") ),
+    reference(n"Ni", joinpath(refpath, "Ni std.msa") ),
+    reference(n"Si", joinpath(refpath, "Si std.msa") ),
+    reference(n"Ti", joinpath(refpath, "Ti std.msa") ),
+    reference(n"Zn", joinpath(refpath, "Zn std.msa") ) ], 132.0
+)
+```
+
+Fit the HyperSpectrum using the references.  We will first use the :Fast
+algorithm.
+
+```julia;
+using Colors
+@time resf = fit_spectrum(hs, refs, mode = :Fast)
+```
+
+For many of the reference spectra, there are multiple characteristic x-ray peaks
+to fit.  We must fit them all.  However, when it comes time to interogate the
+data, we want to select one line family per element.  Then we will normalize
+the k-ratios to a sum of unity at each coordinate in the hyper-spectrum.
+```julia
+bestks = optimizeks(SimpleKRatioOptimizer(2.0), resf)
+bestf = LinearAlgebra.normalize(bestks)
+```
+Next, we will create images to represent the k-ratio data. We will both
+store images to disk and display the images in the report.
+```julia; fig_height=10; fig_width=10; fig_ext=".svg";
+foreach(bf->save(File(format"PNG", joinpath(plotsdir(),"$(bf[1].element)[Log3].png")), Log3Band.(bf[2])),bestf)
+foreach(bf->save(File(format"PNG", joinpath(plotsdir(),"$(bf[1].element)[Linear].png")), LinearScale.(bf[2])),bestf)
+display(labeledimages([symbol(bf[1].element) for bf in bestf],[Log3Band.(bf[2]) for bf in bestf], ncols=4))
+```
+This displays the legend for the Bright's Log-3-Band palette.
+```julia; fig_height=1; fig_width=4; fig_ext=".png";
+loadlegend("Log3BandBright.png")
+```
+
+```julia; fig_height=10; fig_width=10; fig_ext=".svg";
+filt = NeXLCore.normalize(filter(k->!(element(k) in ( n"C", )), bestks))
+@time dv = DiluvianCluster(map(t->element(t[1]), filt),map(t->t[2], filt), bin=x->floor(Integer, min(1.0, max(0.0, x)) * 10.0))
+display(labeledimage("Clustered Map Data", asimage(dv)))
+```
+
+Show the cluster map image palette.
+```julia; fig_height=1; fig_width=10; fig_ext=".svg";
+display(NeXLParticle.defaultpalette(dv))
+```
+
+Select those clusters with more than 1 pixel.
+```julia
+cl = collect(filter(i->count(dv,i)>1, eachindex(dv)))
+```
+
+Plot a multi-ternary with all the clusters with more than 1 pixel.
+```julia; fig_height=10; fig_width=10; fig_ext=".svg";
+multiternary(dv, cl; maxitems = 2500)
+```
+
+Display the masked sum spectra and the associated mask image for each cluster.
+```julia; fig_height=4; fig_width=10; fig_ext=".svg";
+
+function cspec(hs, dv, i)
+    res = sum(hs, asmask(dv,i))
+    res[:Name] = "Cluster $i"
+    return res
+end
+
+els = [ n"Ag", n"Al", n"C", n"Ca", n"Ce", n"Cr", n"Cu", n"Fe", n"S", n"P", n"K", n"Mg", n"O", n"Mn", n"Na", n"Ni", n"Si", n"Ti", n"Zn" ]
+
+display.([ plotandimage(plot(
+    cspec(hs, dv, i),
+    xmax=10.0e3,
+    klms = els
+), Gray.(asmask(dv, i))) for i in cl ])
+nothing
+```
+
+Summarize the mean cluster properties.
+```julia
+ENV["COLUMNS"], ENV["LINES"]=300, 100
+summarizeclusters(dv)
+```
