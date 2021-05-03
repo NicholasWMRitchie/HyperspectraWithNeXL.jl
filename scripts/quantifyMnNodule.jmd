@@ -1,0 +1,142 @@
+```julia
+using DrWatson
+@quickactivate("HyperspectraWithNeXL")
+
+using NeXLSpectrum
+using NeXLMatrixCorrection
+using NeXLParticle
+using DataFrames
+using Images
+using FileIO
+using Gadfly
+using LinearAlgebra
+using Statistics
+using Cairo, Fontconfig
+```
+Load the hyperspectrum from a RPL/RAW file.
+```julia
+path = joinpath(datadir(),"exp_raw","Mn Nodule")
+
+lt = 0.72*4.0*18.0*3600.0/(1024*1024) # 18.0 hours on 4 detectors
+hs = NeXLSpectrum.compress(HyperSpectrum(
+    LinearEnergyScale(0.0,10.0),
+    Dict{Symbol,Any}(
+      :TakeOffAngle => deg2rad(35.0),
+      :ProbeCurrent => 1.0, 
+      :LiveTime => lt, 
+      :BeamEnergy => 20.0e3, 
+      :Name => splitdir(path)[2]),
+    readrplraw(joinpath(path,"map[15]"))
+))
+hs[:Detector] = matching(hs, 132.0);
+```
+
+Plot the max-pixel spectrum to determine which elements are present.
+```julia; fig_height=3; fig_width=10; fig_ext=".svg";
+mp = maxpixel(hs)
+plot(mp, klms=[ n"C", n"O", n"Ag", n"Al", n"Ba", n"Ca", n"Cr", n"Cl", n"Fe", #
+                n"S", n"P", n"Cu", n"K", n"Mg", n"Mn", n"Na", n"Ni", n"Si", #
+                n"Ti", n"Zn", n"Os" ], xmax=10.0e3)
+```
+
+Create a `FilterFitPacket` with the fitting standards.
+```julia
+refpath = joinpath(path, "Standards")
+refs = references( [
+    reference(n"Ag", joinpath(refpath, "Ag std.msa") ),
+    reference(n"Al", joinpath(refpath, "Al std.msa") ),
+    reference(n"C", joinpath(refpath, "C std.msa") ),
+    reference(n"Ca", joinpath(refpath, "CaF2 std.msa") ),
+    reference(n"Ce", joinpath(refpath, "CeO2 std.msa") ),
+    reference(n"Cl", joinpath(refpath, "NaCl std.msa") ),
+    reference(n"Cr", joinpath(refpath, "Cr std.msa") ),
+    reference(n"Cu", joinpath(refpath, "Cu std.msa") ),
+    reference(n"Fe", joinpath(refpath, "Fe std.msa") ),
+    reference(n"S", joinpath(refpath, "FeS2 std.msa") ),
+    reference(n"P", joinpath(refpath, "GaP std.msa") ),
+    reference(n"K", joinpath(refpath, "KBr std.msa") ),
+    reference(n"Mg", joinpath(refpath, "Mg std.msa") ),
+    reference(n"O", joinpath(refpath, "MgO std.msa") ),
+    reference(n"Mn", joinpath(refpath, "Mn std.msa") ),
+    reference(n"Na", joinpath(refpath, "NaCl std.msa") ),
+    reference(n"Ni", joinpath(refpath, "Ni std.msa") ),
+    reference(n"Si", joinpath(refpath, "Si std.msa") ),
+    reference(n"Ti", joinpath(refpath, "Ti std.msa") ),
+    reference(n"Zn", joinpath(refpath, "Zn std.msa") ) ], 132.0
+)
+```
+Fit the hyperspectral data.
+```julia
+roi = 1:16:1024
+resf = @time fit_spectrum(hs[roi,roi], refs, mode = :Full)
+```
+Determine the best k-ratio for each element.
+```julia
+bestks = optimizeks(SimpleKRatioOptimizer(2.0), resf)
+```
+
+Create normalized k-ratio maps.   Normalized k-ratio maps are an e
+```julia; fig_height=10; fig_width=10; fig_ext=".svg";
+# Normalize the k-ratios for presentation
+bestf = LinearAlgebra.normalize(bestks);
+output = joinpath(plotsdir(),"Mn Nodule","Quant")
+mkpath(output)
+foreach(bf->FileIO.save(File(format"PNG", joinpath(output,"k[$(symbol(bf[1].element))][Log3].png")), Log3Band.(bf[2])),bestf)
+foreach(bf->FileIO.save(File(format"PNG", joinpath(output,"k[$(symbol(bf[1].element))][Linear].png")), LinearScale.(bf[2])),bestf)
+display(labeledimages([symbol(bf[1].element) for bf in bestf],[Log3Band.(bf[2]) for bf in bestf], ncols=4))
+```
+
+
+```julia
+res = quantify(resf);
+
+atr = analyticaltotal.(res)
+( mean(atr), std(atr), extrema(atr)...)
+```
+
+```julia; fig_height=6; fig_width=6; fig_ext=".svg";
+# Convert low analytical totals (maybe voids?) to a null material.
+toblack(mat) = analyticaltotal(mat)<0.5 ? NeXLCore.NULL_MATERIAL : mat
+# Normalize the k-ratios to [0.0, 1.0]
+resn = asnormalized.(toblack.(res))
+for elm in elms(refs)
+    elmq = map(mat->mat[elm], resn)
+    FileIO.save(joinpath(output, "Quant[$(symbol(elm))][Linear].png"), gray.(elmq))
+    FileIO.save(joinpath(output,"Mask[$(symbol(elm)) gt 0.1].png"), gray.(elmq.>0.1))
+    FileIO.save(joinpath(output, "Quant[$(symbol(elm))][Log3band].png"), Log3Band.(elmq))
+end
+
+extr(r,el) = map(mat->NeXLUncertainties.value(mat[el]), r)
+FileIO.save(joinpath(output, "Colorized[Red=Mn,Green=C,Blue=O].png"), 
+    colorview(RGB, extr(resn,n"Mn"), extr(resn,n"C"), extr(resn,n"O")));
+
+
+filt = NeXLCore.normalize(filter(k->!(element(k) in ( n"C", )), bestks))
+dv = DiluvianCluster(map(t->element(t[1]), filt),map(t->t[2], filt), bin=x->floor(Integer, min(1.0, max(0.0, x)) * 10.0))
+FileIO.save(joinpath(output, "ClusterMap.png"), asimage(dv))
+labeledimage("Clustered Map Data", asimage(dv))
+```
+
+```julia; fig_height=2; fig_width=3; fig_ext=".svg";
+display(NeXLParticle.defaultpalette(dv))
+```
+
+```julia; fig_height=6; fig_width=6; fig_ext=".svg";
+# Select those clusters with more than 5 pixel.
+cl = collect(filter(i->count(dv,i)>5, eachindex(dv)));
+multiternary(dv, cl; maxitems = 2500)
+```
+
+
+```julia; fig_height=3; fig_width=8; fig_ext=".svg";
+for i in cl
+    mask = asmask(dv,i)
+    cs = sum(hs[roi,roi], mask ,name="Cluster $i")
+    display(plotandimage(plot(cs, xmax=10.0e3, klms = elms(refs)),Gray.(mask)))
+end
+
+comps=map(i->mean(res[asmask(dv, i)]), 1:20)
+ENV["columns"]=500
+asa(DataFrame, comps)
+```
+

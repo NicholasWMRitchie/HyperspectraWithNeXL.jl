@@ -1,0 +1,80 @@
+# Elemental Maps
+Elemental maps are a quick way to get a first look at a hyperspectral data set.  They are quick because they simply integrate
+the counts in the channels near an X-ray energy.  However, they can be deceptive because:
+   1. Counts are not comparable between elements since counts are not proportional to mass-fraction.
+   2. The images are not continuum corrected so high mean atomic number regions can appear to be regions with increased trace element content.
+
+By default, the elemental map generation algorithm integrates for one FWHM at the characteristic X-ray energy.  There are alternative forms of
+the `roiimage(...)` and `roiimages(...)` functions which allow you you specify the channel range specifically.
+
+If the `HyperSpectrum` has the `:Detector` property defined as an `EDSDetector` then the detector will be used to determine the FWHM.  Otherwise,
+the FWHM is assumed to equal 130.0 eV at Mn Kα.
+```julia
+using DrWatson
+@quickactivate("HyperspectraWithNeXL")
+
+
+using NeXLSpectrum
+using Gadfly
+```
+
+```julia
+path = joinpath(datadir(),"exp_raw","Mn Nodule")
+
+lt = 0.72*4.0*18.0*3600.0/(1024*1024) # 18.0 hours on 4 detectors
+hs = NeXLSpectrum.compress(HyperSpectrum(
+    LinearEnergyScale(0.0,10.0),
+    Dict{Symbol,Any}(
+      :TakeOffAngle => deg2rad(35.0),
+      :ProbeCurrent => 1.0, 
+      :LiveTime => lt, 
+      :BeamEnergy => 20.0e3, 
+      :Name => splitdir(path)[2]),
+    readrplraw(joinpath(path,"map[15]"))
+))
+# Automatically generate a matching EDSDetector with a resolution of 132.0 eV at Mn Kα.
+hs[:Detector] = matching(hs, 132.0)
+```
+
+Plot the max-pixel spectrum to see which elements are present.
+```julia; fig_height=3; fig_width=10; fig_ext=".svg";
+plot(maxpixel(hs), klms=[ n"C", n"O", n"Ag", n"Al", n"Ba", n"Ca", n"Cr", n"Cl", n"Fe", #
+                n"S", n"P", n"Cu", n"K", n"Mg", n"Mn", n"Na", n"Ni", n"Si", #
+                n"Ti", n"Zn", n"Os" ], xmax=10.0e3)
+```
+
+Plot the sum spectrum to see which elements are prevelant.
+```julia; fig_height=3; fig_width=10; fig_ext=".svg";
+plot(sum(hs), klms=[ n"C", n"O", n"Ag", n"Al", n"Ba", n"Ca", n"Cr", n"Cl", n"Fe", #
+                n"S", n"P", n"Cu", n"K", n"Mg", n"Mn", n"Na", n"Ni", n"Si", #
+                n"Ti", n"Zn", n"Os" ], xmax=10.0e3)
+```
+
+Construct a simple elemental map by integrating the region one FWHM around the Mn K-L3 line.
+```julia; fig_height=6; fig_width=6; fig_ext=".png";
+hs[n"Mn K-L3"] # Equivalent to roiimage(n"Mn K-L3")
+```
+
+When the `HyperSpectrum` is indexed with a `CharXRay`, a simple elemental map is generated.  The map represents
+a range of 5 channels above and below the X-ray energy.  (see `roiimage(...)`)  Each of
+the image intensities is scaled independently.   This can confuse because the scales are different
+between elements.
+```julia; fig_height=6; fig_width=6; fig_ext=".png";
+# Equivalent to roiimage.( ( hs[n"Mn K-L3"], hs[n"Ca K-L3"], hs[n"Si K-L3" ], hs[n"O K-L3" ] ) )
+display.( ( hs[n"Mn K-L3"], hs[n"Ca K-L3"], hs[n"Si K-L3" ], hs[n"O K-L3" ] ));
+```
+
+When the `HyperSpectrum` is indexed with an  `Array{CharXRay}`, an simple elemental map is generated for each `CharXRay`.  
+However, the image intensities are scales on the same scale making relative intensities easier to compare between
+images. (see `roiimages(...)`)
+```julia; fig_height=6; fig_width=6; fig_ext=".png";
+# Equivalent to roiimages([ n"Mn K-L3", n"Ca K-L3", n"Si K-L3", n"O K-L3" ])
+display.(hs[ [ n"Mn K-L3", n"Ca K-L3", n"Si K-L3", n"O K-L3" ] ]);
+```
+
+To generate a RGB colorized image, index the `HyperSpectrum` with a tuple of three `CharXRay`.  This scales The
+element intensities relative to one another (like immediately above) and then assigns the intensities to 
+RGB in the order of the `CharXRay`.
+```julia; fig_height=6; fig_width=6; fig_ext=".png";
+hs[ ( n"Mn K-L3", n"O K-L3", n"Si K-L3" ) ]
+```

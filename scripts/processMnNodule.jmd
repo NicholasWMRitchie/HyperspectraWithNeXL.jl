@@ -13,7 +13,7 @@ using DrWatson
 using NeXLSpectrum
 using NeXLParticle
 using DataFrames
-using Images
+using Images, Colors
 using FileIO
 using Gadfly
 using LinearAlgebra
@@ -27,20 +27,21 @@ hs = NeXLSpectrum.compress(HyperSpectrum(
     LinearEnergyScale(0.0,10.0),
     Dict{Symbol,Any}(:ProbeCurrent => 1.0, :LiveTime => lt, :BeamEnergy => 20.0e3, :Name => splitdir(path)[2]),
     readrplraw(joinpath(path,"map[15]"))
-));
+)); # [1:16:end,1:16:end];
 ```
 
 Next read in the reference spectra that will be used to extract the k-ratios
 from the HyperSpectrum.
 ```julia
 refpath = joinpath(path, "Standards")
-
+# The material composition is read from the spectrum file.
 refs = references( [
     reference(n"Ag", joinpath(refpath, "Ag std.msa") ),
     reference(n"Al", joinpath(refpath, "Al std.msa") ),
     reference(n"C", joinpath(refpath, "C std.msa") ),
     reference(n"Ca", joinpath(refpath, "CaF2 std.msa") ),
     reference(n"Ce", joinpath(refpath, "CeO2 std.msa") ),
+    reference(n"Cl", joinpath(refpath, "NaCl std.msa") ),
     reference(n"Cr", joinpath(refpath, "Cr std.msa") ),
     reference(n"Cu", joinpath(refpath, "Cu std.msa") ),
     reference(n"Fe", joinpath(refpath, "Fe std.msa") ),
@@ -58,21 +59,23 @@ refs = references( [
 )
 ```
 
-Fit the HyperSpectrum using the references.  We will first use the :Fast
-algorithm.
+Fit the HyperSpectrum using the references.  We will use the :Fast algorithm because it is good enough to
+generate maps of normalized k-ratios.
 
 ```julia;
-using Colors
 @time resf = fit_spectrum(hs, refs, mode = :Fast)
 ```
 
 For many of the reference spectra, there are multiple characteristic x-ray peaks
-to fit.  We must fit them all.  However, when it comes time to interogate the
+to fit.  We must fit them all.  However, when it comes time to display the
 data, we want to select one line family per element.  Then we will normalize
-the k-ratios to a sum of unity at each coordinate in the hyper-spectrum.
+the k-ratios to a sum of unity for each spectrum in the hyper-spectrum.
+
+In Julia, gray-scale images are just matrices of numbers between 0.0 (black) and 1.0 (white).
+This maps very handily onto normalized k-ratios (or normalized compositions for that matter).
 ```julia
 bestks = optimizeks(SimpleKRatioOptimizer(2.0), resf)
-bestf = LinearAlgebra.normalize(bestks)
+bestf = LinearAlgebra.normalize(bestks);
 ```
 Next, we will create images to represent the k-ratio data. We will both
 store images to disk and display the images in the report.
@@ -109,25 +112,16 @@ multiternary(dv, cl; maxitems = 2500)
 
 Display the masked sum spectra and the associated mask image for each cluster.
 ```julia; fig_height=4; fig_width=10; fig_ext=".svg";
-
-function cspec(hs, dv, i)
-    res = sum(hs, asmask(dv,i))
-    res[:Name] = "Cluster $i"
-    return res
+for i in cl
+    mask = asmask(dv,i)
+    cs = sum(hs, mask ,name="Cluster $i")
+    display(plotandimage(plot(cs, xmax=10.0e3, klms = elms(refs)),Gray.(mask)))
 end
-
-els = [ n"Ag", n"Al", n"C", n"Ca", n"Ce", n"Cr", n"Cu", n"Fe", n"S", n"P", n"K", n"Mg", n"O", n"Mn", n"Na", n"Ni", n"Si", n"Ti", n"Zn" ]
-
-display.([ plotandimage(plot(
-    cspec(hs, dv, i),
-    xmax=10.0e3,
-    klms = els
-), Gray.(asmask(dv, i))) for i in cl ])
 nothing
 ```
 
 Summarize the mean cluster properties.
 ```julia
-ENV["COLUMNS"], ENV["LINES"]=300, 100
+ENV["COLUMNS"], ENV["LINES"]=400, 100
 summarizeclusters(dv)
 ```
