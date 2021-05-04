@@ -1,19 +1,36 @@
+# Full Quantification
+Fully quantifying a hyperspectrum using the same algorithms that you'd use for a single `Spectrum` takes time.
+This example is a 1024 pixel × 1024 pixel hyperspectrum with 2048 channels.  There are 20 elements with 33
+distinct fitting regions.  Even on a relatively fast laptop with 64 GB of memory, it takes about 6 hours
+to fit and quantify all one million spectra (about 21 ms per particle approximately evenly divided between
+fitting and matrix correction.)
+
+However, this is what we will do because sometimes the payoff is worth the pain.  After quantification,
+we will end up with a matrix corrected estimate of composition for each pixel in the spectrum image.
+We can then cluster on this and extract spectra or mean compositions for each cluster.
+
+The dataset is a cross-section through a deep sea Mn nodule. It has beautiful growth ring structure
+which may have deposited over hundreds-of-thousands of years.  There are many elements present somewhere 
+in the structure although the material is dominated by Mn, O, C, Si and Fe.  The clustering shows compositional
+similarity even at disparite locations on the sample.
+
+First we must load the necesary libraries.
 ```julia
 using DrWatson
 @quickactivate("HyperspectraWithNeXL")
 
-using NeXLSpectrum
-using NeXLMatrixCorrection
-using NeXLParticle
-using DataFrames
-using Images
-using FileIO
-using Gadfly
-using LinearAlgebra
-using Statistics
-using Cairo, Fontconfig
+using NeXLSpectrum # Spectrum, hyperspectrum and fitting
+using NeXLMatrixCorrection # Matrix correction
+using NeXLParticle # Clustering
+using DataFrames # Tabulation
+using Images # Display
+using FileIO # Saving to disk
+using Gadfly # Plotting
+using LinearAlgebra # Normalization
+using Statistics # Stats like mean
 ```
-Load the hyperspectrum from a RPL/RAW file.
+
+Load the EDS spectrum image from a RPL/RAW file.
 ```julia
 path = joinpath(datadir(),"exp_raw","Mn Nodule")
 
@@ -29,10 +46,12 @@ hs = NeXLSpectrum.compress(HyperSpectrum(
     readrplraw(joinpath(path,"map[15]"))
 ))
 hs[:Detector] = matching(hs, 132.0)
-#hs = view(hs,1:64:1024,1:64:1024)
+# hs = hs[1:64:1024,1:64:1024] # Comment this line to run the full spectrum image
+hs
 ```
 
-Create a `FilterFitPacket` with the fitting standards.
+Create a `FilterFitPacket` with the fitting standards.  Plot the max-pixel spectrum and KLMs from the
+reference spectra elements to demonstrate that we've identified the major elements.
 ```julia; fig_height=3; fig_width=10; fig_ext=".svg";
 refpath = joinpath(path, "Standards")
 refs = references( [
@@ -60,6 +79,7 @@ refs = references( [
 # Plot the max-pixel against the reference elements
 plot(maxpixel(hs), klms=elms(refs), xmax=10.0e3)
 ```
+
 Fit the hyperspectral data to extract k-ratios.
 ```julia
 resf = @time fit_spectrum(hs, refs, mode = :Full)
@@ -72,7 +92,7 @@ res = @time quantify(resf);
 ```
 `res` is an `Array{Material}`.
 
-Look at the analytical totals.
+Look at the statistics on the analytical totals.
 ```julia
 atr = analyticaltotal.(res)
 ( mean(atr), std(atr), extrema(atr)...)
@@ -80,14 +100,16 @@ atr = analyticaltotal.(res)
 
 Let's define a function `extract(...)` to extract the mass-fraction associated with `elm`
 from an array of `Material`.  This will construct an array the same shape as `mat` but
-containing `Float64` representing the mass fraction of `elm`.
+containing `Float64` representing the mass fraction of `elm`.  When `mats` is normalized
+the resulting `Array{Float64}` will only contain values between 0.0 and 1.0 making them
+suitable to be gray-scale images in Julia.
 ```julia
 extract(mats::AbstractArray{<:Material}, elm::Element) = map(m->NeXLUncertainties.value(m[elm]), mats)
 ```
 
 Construct images with various different presentation of the elemental data - a regular gray-scale image, a Mask
 of all pixels with mass-fraction of `elm` > 0.1 and a Bright-style Log 3-band image.  Write these to disk as PNG images.
-```julia; fig_height=6; fig_width=6; fig_ext=".png";
+```julia; fig_height=6; fig_width=6; fig_ext=".svg";
 output = joinpath(plotsdir(),"Mn Nodule","Quant")
 # Convert low analytical totals (maybe voids?) to a null material.
 toblack(mat) = analyticaltotal(mat)<0.5 ? NeXLCore.NULL_MATERIAL : mat
@@ -103,9 +125,10 @@ for elm in elms(refs)
     FileIO.save(joinpath(output, "Quant[$(symbol(elm))][Log3band].png"), Log3Band.(elmq))
 end
 
-# Construct gray-scale images and display them in this document.
-imgs = map(el->Gray.(extract(resn, el)), elms(refs)) 
-display.(imgs);
+# Construct Log 3-Band images and display them in this document.
+for (el, img) in map(el->( symbol(el), Log3Band.(extract(resn, el))), elms(refs))
+    display(labeledimage(el,img))
+end
 ```
 
 Construct an RGB colorized view with Mn=>red, C=>green and O=>blue.
@@ -119,7 +142,7 @@ els = elms(refs)
 dv = DiluvianCluster(els, map(el->extract(resn, el), els), bin=x->floor(Integer, min(1.0, max(0.0, x)) * 10.0))
 climg = asimage(dv)
 FileIO.save(joinpath(output, "ClusterMap.png"), climg)
-labeledimage("Clustered Map Data", climg)
+labeledimage("Clustered Compositional Data", climg)
 ```
 
 ```julia; fig_height=2; fig_width=3; fig_ext=".svg";
@@ -129,22 +152,32 @@ NeXLParticle.defaultpalette(dv)
 Construct a ternary to display common types of pixels.
 ```julia; fig_height=6; fig_width=6; fig_ext=".svg";
 # Select those clusters with more than 100 pixels.
-cl = collect(filter(i->count(dv,i)>100, eachindex(dv)));
-multiternary(dv, cl; maxitems = 2500)
+cl = collect(filter(i->count(dv,i)>100, eachindex(dv)))
+# Draw a multi-ternary diagram to summarize the compositions
+mt = multiternary(dv, cl; maxitems = 2500) 
+mt |> SVG(joinpath(output,"ClusterTernary.svg"), 8inch, 8inch)
+mt
 ```
 
 Plot the sum spectrum and a pixel mask. 
 ```julia; fig_height=3; fig_width=8; fig_ext=".svg";
 for i in cl
+    # Those pixels in cluster i
     mask = asmask(dv,i)
+    # Create a sum spectrum from those pixels
     cs = sum(hs, mask ,name="Cluster $i")
+    # Plot the spectrum and the mask
     display(plotandimage(plot(cs, xmax=10.0e3, klms = elms(refs)),Gray.(mask)))
 end
 ```
 
-Summarize these classes in a table
+Summarize these classes in a table. `res[asmask(dv,i)]` constructs an array of the `Material`s from the
+pixels that are in cluster `i`. Then `mean(...)` takes an array of `Material` and computes the 
+average mass-fraction for each element present and returns this as a `Material`.  We will tabulate these
+`Material`s for each different cluster in `cl`.
 ```julia
 ENV["columns"]=500
 asa(DataFrame, map(i->mean(res[asmask(dv, i)]), cl))
 ```
 
+##### QED - NWMR 4-May-2021
