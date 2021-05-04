@@ -28,19 +28,12 @@ hs = NeXLSpectrum.compress(HyperSpectrum(
       :Name => splitdir(path)[2]),
     readrplraw(joinpath(path,"map[15]"))
 ))
-hs[:Detector] = matching(hs, 132.0);
-```
-
-Plot the max-pixel spectrum to determine which elements are present.
-```julia; fig_height=3; fig_width=10; fig_ext=".svg";
-mp = maxpixel(hs)
-plot(mp, klms=[ n"C", n"O", n"Ag", n"Al", n"Ba", n"Ca", n"Cr", n"Cl", n"Fe", #
-                n"S", n"P", n"Cu", n"K", n"Mg", n"Mn", n"Na", n"Ni", n"Si", #
-                n"Ti", n"Zn", n"Os" ], xmax=10.0e3)
+hs[:Detector] = matching(hs, 132.0)
+#hs = view(hs,1:64:1024,1:64:1024)
 ```
 
 Create a `FilterFitPacket` with the fitting standards.
-```julia
+```julia; fig_height=3; fig_width=10; fig_ext=".svg";
 refpath = joinpath(path, "Standards")
 refs = references( [
     reference(n"Ag", joinpath(refpath, "Ag std.msa") ),
@@ -64,79 +57,94 @@ refs = references( [
     reference(n"Ti", joinpath(refpath, "Ti std.msa") ),
     reference(n"Zn", joinpath(refpath, "Zn std.msa") ) ], 132.0
 )
+# Plot the max-pixel against the reference elements
+plot(maxpixel(hs), klms=elms(refs), xmax=10.0e3)
 ```
-Fit the hyperspectral data.
+Fit the hyperspectral data to extract k-ratios.
 ```julia
-roi = 1:16:1024
-resf = @time fit_spectrum(hs[roi,roi], refs, mode = :Full)
+resf = @time fit_spectrum(hs, refs, mode = :Full)
 ```
-Determine the best k-ratio for each element.
+`resf` is an `Array{KRatios}`. 
+
+Quantify the k-ratios to get the compositions.
 ```julia
-bestks = optimizeks(SimpleKRatioOptimizer(2.0), resf)
+res = @time quantify(resf);
 ```
+`res` is an `Array{Material}`.
 
-Create normalized k-ratio maps.   Normalized k-ratio maps are an e
-```julia; fig_height=10; fig_width=10; fig_ext=".svg";
-# Normalize the k-ratios for presentation
-bestf = LinearAlgebra.normalize(bestks);
-output = joinpath(plotsdir(),"Mn Nodule","Quant")
-mkpath(output)
-foreach(bf->FileIO.save(File(format"PNG", joinpath(output,"k[$(symbol(bf[1].element))][Log3].png")), Log3Band.(bf[2])),bestf)
-foreach(bf->FileIO.save(File(format"PNG", joinpath(output,"k[$(symbol(bf[1].element))][Linear].png")), LinearScale.(bf[2])),bestf)
-display(labeledimages([symbol(bf[1].element) for bf in bestf],[Log3Band.(bf[2]) for bf in bestf], ncols=4))
-```
-
-
+Look at the analytical totals.
 ```julia
-res = quantify(resf);
-
 atr = analyticaltotal.(res)
 ( mean(atr), std(atr), extrema(atr)...)
 ```
 
-```julia; fig_height=6; fig_width=6; fig_ext=".svg";
+Let's define a function `extract(...)` to extract the mass-fraction associated with `elm`
+from an array of `Material`.  This will construct an array the same shape as `mat` but
+containing `Float64` representing the mass fraction of `elm`.
+```julia
+extract(mats::AbstractArray{<:Material}, elm::Element) = map(m->NeXLUncertainties.value(m[elm]), mats)
+```
+
+Construct images with various different presentation of the elemental data - a regular gray-scale image, a Mask
+of all pixels with mass-fraction of `elm` > 0.1 and a Bright-style Log 3-band image.  Write these to disk as PNG images.
+```julia; fig_height=6; fig_width=6; fig_ext=".png";
+output = joinpath(plotsdir(),"Mn Nodule","Quant")
 # Convert low analytical totals (maybe voids?) to a null material.
 toblack(mat) = analyticaltotal(mat)<0.5 ? NeXLCore.NULL_MATERIAL : mat
-# Normalize the k-ratios to [0.0, 1.0]
+# Normalize the mass-fractions to [0.0, 1.0] while setting low totals to zero.
 resn = asnormalized.(toblack.(res))
 for elm in elms(refs)
-    elmq = map(mat->mat[elm], resn)
-    FileIO.save(joinpath(output, "Quant[$(symbol(elm))][Linear].png"), gray.(elmq))
-    FileIO.save(joinpath(output,"Mask[$(symbol(elm)) gt 0.1].png"), gray.(elmq.>0.1))
+    elmq = extract(resn, elm)
+    # A regular gray-scale image representing each element
+    FileIO.save(joinpath(output, "Quant[$(symbol(elm))][Linear].png"), Gray.(elmq))
+    # A mask representing each point at which the mass-fraction is greater than 0.1
+    FileIO.save(joinpath(output,"Mask[$(symbol(elm)) gt 0.1].png"), Gray.(elmq.>0.1))
+    # A Log 3-band image representing the mass fractions
     FileIO.save(joinpath(output, "Quant[$(symbol(elm))][Log3band].png"), Log3Band.(elmq))
 end
 
-extr(r,el) = map(mat->NeXLUncertainties.value(mat[el]), r)
-FileIO.save(joinpath(output, "Colorized[Red=Mn,Green=C,Blue=O].png"), 
-    colorview(RGB, extr(resn,n"Mn"), extr(resn,n"C"), extr(resn,n"O")));
+# Construct gray-scale images and display them in this document.
+imgs = map(el->Gray.(extract(resn, el)), elms(refs)) 
+display.(imgs);
+```
 
+Construct an RGB colorized view with Mn=>red, C=>green and O=>blue.
+```julia; fig_height=6; fig_width=6; fig_ext=".png";
+colorview(RGB, extract(resn, n"Mn"), extract(resn,n"C"), extract(resn,n"O"))
+```
 
-filt = NeXLCore.normalize(filter(k->!(element(k) in ( n"C", )), bestks))
-dv = DiluvianCluster(map(t->element(t[1]), filt),map(t->t[2], filt), bin=x->floor(Integer, min(1.0, max(0.0, x)) * 10.0))
-FileIO.save(joinpath(output, "ClusterMap.png"), asimage(dv))
-labeledimage("Clustered Map Data", asimage(dv))
+Cluster on composition rather than k-ratio.
+```julia; fig_height=6; fig_width=6; fig_ext=".svg";
+els = elms(refs)
+dv = DiluvianCluster(els, map(el->extract(resn, el), els), bin=x->floor(Integer, min(1.0, max(0.0, x)) * 10.0))
+climg = asimage(dv)
+FileIO.save(joinpath(output, "ClusterMap.png"), climg)
+labeledimage("Clustered Map Data", climg)
 ```
 
 ```julia; fig_height=2; fig_width=3; fig_ext=".svg";
-display(NeXLParticle.defaultpalette(dv))
+NeXLParticle.defaultpalette(dv)
 ```
 
+Construct a ternary to display common types of pixels.
 ```julia; fig_height=6; fig_width=6; fig_ext=".svg";
-# Select those clusters with more than 5 pixel.
-cl = collect(filter(i->count(dv,i)>5, eachindex(dv)));
+# Select those clusters with more than 100 pixels.
+cl = collect(filter(i->count(dv,i)>100, eachindex(dv)));
 multiternary(dv, cl; maxitems = 2500)
 ```
 
-
+Plot the sum spectrum and a pixel mask. 
 ```julia; fig_height=3; fig_width=8; fig_ext=".svg";
 for i in cl
     mask = asmask(dv,i)
-    cs = sum(hs[roi,roi], mask ,name="Cluster $i")
+    cs = sum(hs, mask ,name="Cluster $i")
     display(plotandimage(plot(cs, xmax=10.0e3, klms = elms(refs)),Gray.(mask)))
 end
+```
 
-comps=map(i->mean(res[asmask(dv, i)]), 1:20)
+Summarize these classes in a table
+```julia
 ENV["columns"]=500
-asa(DataFrame, comps)
+asa(DataFrame, map(i->mean(res[asmask(dv, i)]), cl))
 ```
 
