@@ -80,12 +80,15 @@ Create normalized k-ratio maps.   Normalized k-ratio maps are an excellent way t
 elemental data in a quantitative manner.
 ```julia; fig_height=10; fig_width=10; fig_ext=".svg";
 # Normalize the k-ratios for presentation
-bestf = LinearAlgebra.normalize(bestks);
+pureks = aspure.(bestks)
+bestf = LinearAlgebra.normalize(pureks)
 output = joinpath(plotsdir(),"Mn Nodule","Quant")
 mkpath(output)
-foreach(bf->FileIO.save(File(format"PNG", joinpath(output,"k[$(symbol(bf[1].element))][Log3].png")), Log3Band.(bf[2])),bestf)
-foreach(bf->FileIO.save(File(format"PNG", joinpath(output,"k[$(symbol(bf[1].element))][Linear].png")), LinearScale.(bf[2])),bestf)
-display(labeledimages(["$(bf[1].xrays)" for bf in bestf],[Log3Band.(bf[2]) for bf in bestf], ncols=4))
+foreach(bestf) do bf
+  FileIO.save(File(format"PNG", joinpath(output,"k[$(symbol(bf.element))][Linear].png")), LinearScale.(bf.kratios))
+  FileIO.save(File(format"PNG", joinpath(output,"k[$(symbol(bf.element))][Log3].png")), Log3Band.(bf.kratios))
+end
+display(labeledimages(["$(bf.xrays)" for bf in bestf],[Log3Band.(bf.kratios) for bf in bestf], ncols=4))
 ```
 
 Finally extract a RGB colorized image from three elements.  :Each normalizes each element independently.
