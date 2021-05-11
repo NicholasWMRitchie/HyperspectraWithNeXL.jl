@@ -28,6 +28,7 @@ using FileIO # Saving to disk
 using Gadfly # Plotting
 using LinearAlgebra # Normalization
 using Statistics # Stats like mean
+include("tohdf5.jl") # Code to save and restore quant results
 ```
 
 Load the EDS spectrum image from a RPL/RAW file.
@@ -79,18 +80,32 @@ refs = references( [
 # Plot the max-pixel against the reference elements
 plot(maxpixel(hs), klms=elms(refs), xmax=10.0e3)
 ```
+Since this calculation can take hours and hours, the results, once calculated, are cached in a HDF5 file
+and reloaded rather than recalculated.
 
-Fit the hyperspectral data to extract k-ratios.
+Check the cache to see whether we've already computed the result.
 ```julia
-resf = @time fit_spectrum(hs, refs, mode = :Full)
+resultFile = joinpath(datadir(),"exp_pro","Mn Nodule.hdf5")
+res, path = nothing, "Quant Results"
+if isfile(resultFile)
+    res = h5open(resultFile,"r") do h5
+        read(h5, path, Material)
+    end
+end
 ```
-`resf` is an `Array{KRatios}`. 
 
-Quantify the k-ratios to get the compositions.
+Fit the hyperspectral data to extract k-ratios then quantify the k-ratios to get the compositions.
 ```julia
-res = @time quantify(resf);
+if isnothing(res)
+    resf = @time fit_spectrum(hs, refs, mode = :Full)
+    res = @time quantify(resf)
+    # Now write the results to the cache
+    h5open(resultFile,"w") do h5
+        write(h5, path, res)
+    end
+end;
 ```
-`res` is an `Array{Material}`.
+`resf` is an `Array{KRatios}` and `res` is an `Array{Material}`.
 
 Look at the statistics on the analytical totals.
 ```julia
