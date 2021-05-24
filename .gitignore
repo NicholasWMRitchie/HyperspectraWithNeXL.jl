@@ -5,7 +5,7 @@
 # Folders to ignore - files may be too large, too many, etc. NOTE: EDIT IF NEEDED.
 videos
 plots
-notebooks
+#notebooks
 _research
 jl_*
 exp_pro
@@ -16,6 +16,7 @@ exp_pro
 *.ltx
 *.pptx
 *.html
+*.tex
 
 ################################################################################
 #                                    Julia                                     #
