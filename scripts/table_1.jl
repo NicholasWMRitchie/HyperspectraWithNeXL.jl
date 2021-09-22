@@ -1,10 +1,10 @@
 using DrWatson
 @quickactivate("HyperspectraWithNeXL")
-using NeXLSpectrum# Load the necessary libraries
+# Load the necessary libraries
 using NeXLSpectrum
 using Gadfly, DataFrames
 # Load the unknown spectra from disk
-specpath = normpath(joinpath(datadir(),"exp_raw","K2496"))
+specpath = joinpath(datadir(),"exp_raw","K2496")
 k2496 = loadspectrum.(joinpath(specpath,"K2496_$(i).msa") for i in 1:3)
 # Construct and apply the detector to the unknown spectra 
 det = matching(k2496[1], 132.0, 110, Dict(MShell=>n"Cs"))
@@ -23,4 +23,4 @@ display(plot(fs[1]))
 # Matrix correct the k-ratios and tabulate the results
 q=quantify.(fs)
 nom = parse(Material, "0.323*O+0.2291*Si+0.018*Ti+0.4299*Ba",name="Nominal")
-asa(DataFrame, q, nominal=nom)
+asa(DataFrame, q, nominal=nom) # or `vcat( [ asa(DataFrame, qq) for qq in q ]...)`
