@@ -9,6 +9,8 @@ plots
 _research
 jl_*
 exp_pro
+papers/Figures/*
+papers/Tables/*
 # Data types to ignore
 *.rpl
 *.raw

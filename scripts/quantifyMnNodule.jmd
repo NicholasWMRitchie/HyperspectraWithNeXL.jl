@@ -28,7 +28,8 @@ using FileIO # Saving to disk
 using Gadfly # Plotting
 using LinearAlgebra # Normalization
 using Statistics # Stats like mean
-include("tohdf5.jl") # Code to save and restore quant results
+using Unitful
+include(joinpath(srcdir(), "tohdf5.jl")) # Code to save and restore quant results
 ```
 
 Load the EDS spectrum image from a RPL/RAW file.
@@ -45,7 +46,7 @@ hs = NeXLSpectrum.compress(HyperSpectrum(
       :BeamEnergy => 20.0e3, 
       :Name => splitdir(path)[2]),
     readrplraw(joinpath(path,"map[15]"))
-))
+, fov = [ 4.096u"mm", 4.096u"mm"], offset= [ 0.0u"mm", 0.0u"mm" ]))
 hs[:Detector] = matching(hs, 132.0)
 # hs = hs[1:64:1024,1:64:1024] # Comment this line to run the full spectrum image
 hs
@@ -83,26 +84,39 @@ plot(maxpixel(hs), klms=elms(refs), xmax=10.0e3)
 Since this calculation can take hours and hours, the results, once calculated, are cached in a HDF5 file
 and reloaded rather than recalculated.
 
-Check the cache to see whether we've already computed the result.
+Check the cache to see whether we've already computed the result.  If so load it, otherwise compute it.
 ```julia
 resultFile = joinpath(datadir(),"exp_pro","Mn Nodule.hdf5")
-res, path = nothing, "Quant Results"
-if isfile(resultFile)
-    res = h5open(resultFile,"r") do h5
+path = "Quant Results"
+res = if isfile(resultFile)
+    @info "Reading results from the cache."
+    h5open(resultFile,"r") do h5
         read(h5, path, Material)
     end
+else 
+    @info "Computing k-ratios then mass-fractions. This will take a few hours..." 
+    resf = @time fit_spectrum(hs, refs, mode = :Full)
+    tmp = @time quantify(resf)
+    # Now write the results to the cache
+    h5open(resultFile,"w") do h5
+        write(h5, path, tmp)
+    end
+    @info "Quantification results computed and written to cache." 
+    tmp
 end
 ```
 
 Fit the hyperspectral data to extract k-ratios then quantify the k-ratios to get the compositions.
 ```julia
 if isnothing(res)
+    @info "Computing k-ratios then mass-fractions. This will take a few hours..." 
     resf = @time fit_spectrum(hs, refs, mode = :Full)
     res = @time quantify(resf)
     # Now write the results to the cache
     h5open(resultFile,"w") do h5
         write(h5, path, res)
     end
+    @info "Quantification results computed and written to cache." 
 end;
 ```
 `resf` is an `Array{KRatios}` and `res` is an `Array{Material}`.
@@ -125,7 +139,7 @@ extract(mats::AbstractArray{<:Material}, elm::Element) = map(m->NeXLUncertaintie
 Construct images with various different presentation of the elemental data - a regular gray-scale image, a Mask
 of all pixels with mass-fraction of `elm` > 0.1 and a Bright-style Log 3-band image.  Write these to disk as PNG images.
 ```julia; fig_height=6; fig_width=6; fig_ext=".svg";
-output = joinpath(plotsdir(),"Mn Nodule","Quant")
+output = joinpath(papersdir(),"Figures", "Mn Nodule", "Quant")
 # Convert low analytical totals (maybe voids?) to a null material.
 toblack(mat) = analyticaltotal(mat)<0.5 ? NeXLCore.NULL_MATERIAL : mat
 # Normalize the mass-fractions to [0.0, 1.0] while setting low totals to zero.
@@ -154,7 +168,7 @@ colorview(RGB, extract(resn, n"Mn"), extract(resn,n"C"), extract(resn,n"O"))
 Cluster on composition rather than k-ratio.
 ```julia; fig_height=6; fig_width=6; fig_ext=".svg";
 els = elms(refs)
-dv = DiluvianCluster(els, map(el->extract(resn, el), els), bin=x->floor(Integer, min(1.0, max(0.0, x)) * 10.0))
+dv = @time DiluvianCluster(els, map(el->extract(resn, el), els), bin=x->floor(Integer, min(1.0, max(0.0, x)) * 10.0))
 climg = asimage(dv)
 FileIO.save(joinpath(output, "ClusterMap.png"), climg)
 labeledimage("Clustered Compositional Data", climg)
@@ -182,7 +196,9 @@ for i in cl
     # Create a sum spectrum from those pixels
     cs = sum(hs, mask ,name="Cluster $i")
     # Plot the spectrum and the mask
-    display(plotandimage(plot(cs, xmax=10.0e3, klms = elms(refs)),Gray.(mask)))
+    pai = plotandimage(plot(cs, xmax=10.0e3, klms = elms(refs)), Gray.(mask))
+    pai |> SVG(joinpath(output,"SaM[Cluster $i].svg"), 8inch, 3inch)
+    display(pai)
 end
 ```
 

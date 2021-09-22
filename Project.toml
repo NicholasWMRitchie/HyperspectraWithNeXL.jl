@@ -16,7 +16,8 @@ NeXLParticle = "9f92fee6-ed62-42c3-b009-0e4f934456c2"
 NeXLSpectrum = "6c578565-ca7f-4012-afc4-b8412d85af92"
 NeXLUncertainties = "7127f3d6-1721-46bc-bb38-8fc703dd438e"
 PrettyTables = "08abe8d2-0d0c-5749-adfa-8a2ac140af0d"
+Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 Weave = "44d3d7a6-8a23-5bf8-98c5-b353f8df5ec9"
 
 [compat]
-julia = "1.6.0"
+julia = "1.6.1"

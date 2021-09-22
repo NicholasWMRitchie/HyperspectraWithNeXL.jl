@@ -40,10 +40,27 @@ plot(mp, klms=[ n"C", n"O", n"Ag", n"Al", n"Ba", n"Ca", n"Cr", n"Cl", n"Fe", #
                 n"Ti", n"Zn", n"Os" ], xmax=10.0e3)
 ```
 
+Construct some quick ROI maps to get a feel for the sample.
+```julia; fig_height=9; fig_width=10; fig_ext=".png";
+output = joinpath(papersdir(), "Figures", "Mn Nodule")
+mkpath(output)
+cxrs = [ n"C K-L2", n"O K-L3", n"Mn K-L3", n"Si K-L3", n"Al K-L3" ]
+foreach( cxrs ) do cxr
+  save(joinpath(output,"I[$cxr].png"), hs[cxr])
+end
+mosaicview(map(x->hs[x], cxrs), fillvalue=0.2, npad=100, ncol=2)
+```
+
+Copy the BSE image into the paper folder.
+```julia
+cp(joinpath(datadir(),"exp_raw","Mn nodule","Image[0][[1]].png"), joinpath(output, "Mn_nodule_BSED.png"), force=true)
+```
+
 Create a `FilterFitPacket` with the fitting standards.
 ```julia
 refpath = joinpath(path, "Standards")
 refs = references( [
+    reference(n"C", joinpath(refpath, "C std.msa") ),
     reference(n"Ag", joinpath(refpath, "Ag std.msa") ),
     reference(n"Al", joinpath(refpath, "Al std.msa") ),
     reference(n"C", joinpath(refpath, "C std.msa") ),
@@ -82,20 +99,22 @@ elemental data in a quantitative manner.
 # Normalize the k-ratios for presentation
 pureks = aspure.(bestks)
 bestf = LinearAlgebra.normalize(pureks)
-output = joinpath(plotsdir(),"Mn Nodule","Quant")
-mkpath(output)
 foreach(bestf) do bf
-  FileIO.save(File(format"PNG", joinpath(output,"k[$(symbol(bf.element))][Linear].png")), LinearScale.(bf.kratios))
-  FileIO.save(File(format"PNG", joinpath(output,"k[$(symbol(bf.element))][Log3].png")), Log3Band.(bf.kratios))
+  FileIO.save(File(format"PNG", joinpath(output,"k[$(bf.xrays)][Linear].png")), LinearScale.(bf.kratios))
+  FileIO.save(File(format"PNG", joinpath(output,"k[$(bf.xrays)][Log3].png")), Log3Band.(bf.kratios))
 end
-display(labeledimages(["$(bf.xrays)" for bf in bestf],[Log3Band.(bf.kratios) for bf in bestf], ncols=4))
+labeledimages(["$(bf.xrays)" for bf in bestf],[Log3Band.(bf.kratios) for bf in bestf], ncols=4)
 ```
 
 Finally extract a RGB colorized image from three elements.  :Each normalizes each element independently.
 :All normalizes the k-ratios relative to all the `KRatios`.
 ```julia
-colorize(bestks, n"Mn", n"O", n"Fe", :Each)
+img = colorize(bestks, n"Mn", n"O", n"Fe", :All)
+save(joinpath(output,"colorized[Mn,O,Fe,Each].png"), img)
+img
 ```
 ```julia
-colorize(bestks, n"Mn", n"O", n"Fe", :All)
+img = bestks[n"Mn", n"O", n"Fe"]
+save(joinpath(output,"colorized[Mn,O,Fe,All].png"), img)
+img
 ```
