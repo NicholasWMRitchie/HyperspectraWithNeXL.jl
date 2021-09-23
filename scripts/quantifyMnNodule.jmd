@@ -19,6 +19,7 @@ First we must load the necesary libraries.
 using DrWatson
 @quickactivate("HyperspectraWithNeXL")
 
+using HyperspectraWithNeXL
 using NeXLSpectrum # Spectrum, hyperspectrum and fitting
 using NeXLMatrixCorrection # Matrix correction
 using NeXLParticle # Clustering
@@ -28,14 +29,12 @@ using FileIO # Saving to disk
 using Gadfly # Plotting
 using LinearAlgebra # Normalization
 using Statistics # Stats like mean
-using Unitful
-include(joinpath(srcdir(), "tohdf5.jl")) # Code to save and restore quant results
+using Unitful # Adding dimensions to quantities
+using HDF5 # Support for the HDF5 file type
 ```
 
 Load the EDS spectrum image from a RPL/RAW file.
 ```julia
-path = joinpath(datadir(),"exp_raw","Mn Nodule")
-
 lt = 0.72*4.0*18.0*3600.0/(1024*1024) # 18.0 hours on 4 detectors
 hs = NeXLSpectrum.compress(HyperSpectrum(
     LinearEnergyScale(0.0,10.0),
@@ -44,9 +43,11 @@ hs = NeXLSpectrum.compress(HyperSpectrum(
       :ProbeCurrent => 1.0, 
       :LiveTime => lt, 
       :BeamEnergy => 20.0e3, 
-      :Name => splitdir(path)[2]),
-    readrplraw(joinpath(path,"map[15]"))
-, fov = [ 4.096u"mm", 4.096u"mm"], offset= [ 0.0u"mm", 0.0u"mm" ]))
+      :Name => "Mn Nodule"
+    ),
+    readrplraw(joinpath(datadep"MnNodule","map[15]")), 
+    fov = [ 4.096u"mm", 4.096u"mm"], offset= [ 0.0u"mm", 0.0u"mm" ]
+))
 hs[:Detector] = matching(hs, 132.0)
 # hs = hs[1:64:1024,1:64:1024] # Comment this line to run the full spectrum image
 hs
@@ -55,7 +56,7 @@ hs
 Create a `FilterFitPacket` with the fitting standards.  Plot the max-pixel spectrum and KLMs from the
 reference spectra elements to demonstrate that we've identified the major elements.
 ```julia; fig_height=3; fig_width=10; fig_ext=".svg";
-refpath = joinpath(path, "Standards")
+refpath = datadep"MnNodule_Standards"
 refs = references( [
     reference(n"Ag", joinpath(refpath, "Ag std.msa") ),
     reference(n"Al", joinpath(refpath, "Al std.msa") ),
@@ -87,11 +88,11 @@ and reloaded rather than recalculated.
 Check the cache to see whether we've already computed the result.  If so load it, otherwise compute it.
 ```julia
 resultFile = joinpath(datadir(),"exp_pro","Mn Nodule.hdf5")
-path = "Quant Results"
+qrpath = "Quant Results"
 res = if isfile(resultFile)
     @info "Reading results from the cache."
     h5open(resultFile,"r") do h5
-        read(h5, path, Material)
+        read(h5, qrpath, Material)
     end
 else 
     @info "Computing k-ratios then mass-fractions. This will take a few hours..." 
@@ -99,26 +100,13 @@ else
     tmp = @time quantify(resf)
     # Now write the results to the cache
     h5open(resultFile,"w") do h5
-        write(h5, path, tmp)
+        write(h5, qrpath, tmp)
     end
     @info "Quantification results computed and written to cache." 
     tmp
-end
-```
-
-Fit the hyperspectral data to extract k-ratios then quantify the k-ratios to get the compositions.
-```julia
-if isnothing(res)
-    @info "Computing k-ratios then mass-fractions. This will take a few hours..." 
-    resf = @time fit_spectrum(hs, refs, mode = :Full)
-    res = @time quantify(resf)
-    # Now write the results to the cache
-    h5open(resultFile,"w") do h5
-        write(h5, path, res)
-    end
-    @info "Quantification results computed and written to cache." 
 end;
 ```
+
 `resf` is an `Array{KRatios}` and `res` is an `Array{Material}`.
 
 Look at the statistics on the analytical totals.
@@ -211,4 +199,4 @@ ENV["columns"]=500
 asa(DataFrame, map(i->mean(res[asmask(dv, i)]), cl))
 ```
 
-##### QED - NWMR 4-May-2021
+##### QED - NWMR 23-Sep-2021

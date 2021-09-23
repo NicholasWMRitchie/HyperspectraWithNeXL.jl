@@ -9,16 +9,14 @@ elemental maps and k-ratio maps:
 using DrWatson
 @quickactivate("HyperspectraWithNeXL")
 
+using HyperspectraWithNeXL
 using NeXLSpectrum
-using Gadfly
-using LinearAlgebra
-using Images
-using FileIO
+using Gadfly, LinearAlgebra
+using Images, FileIO, Unitful
 ```
 Load the hyperspectrum from a RPL/RAW file.
 ```julia
-path = joinpath(datadir(),"exp_raw","Mn Nodule")
-
+# Load the HyperSpectrum from disk
 lt = 0.72*4.0*18.0*3600.0/(1024*1024) # 18.0 hours on 4 detectors
 hs = NeXLSpectrum.compress(HyperSpectrum(
     LinearEnergyScale(0.0,10.0),
@@ -27,9 +25,11 @@ hs = NeXLSpectrum.compress(HyperSpectrum(
       :ProbeCurrent => 1.0, 
       :LiveTime => lt, 
       :BeamEnergy => 20.0e3, 
-      :Name => splitdir(path)[2]),
-    readrplraw(joinpath(path,"map[15]"))
-));
+      :Name => "Mn Nodule"
+    ),
+    readrplraw(joinpath(datadep"MnNodule","map[15]")), 
+    fov = [ 4.096u"mm", 4.096u"mm"], offset= [ 0.0u"mm", 0.0u"mm" ]
+))
 ```
 
 Plot the max-pixel spectrum to determine which elements are present.
@@ -53,12 +53,12 @@ mosaicview(map(x->hs[x], cxrs), fillvalue=0.2, npad=100, ncol=2)
 
 Copy the BSE image into the paper folder.
 ```julia
-cp(joinpath(datadir(),"exp_raw","Mn nodule","Image[0][[1]].png"), joinpath(output, "Mn_nodule_BSED.png"), force=true)
+cp(joinpath(datadep"MnNodule","Image[0][[1]].png"), joinpath(output, "Mn_nodule_BSED.png"), force=true)
 ```
 
 Create a `FilterFitPacket` with the fitting standards.
 ```julia
-refpath = joinpath(path, "Standards")
+refpath = datadep"MnNodule_Standards"
 refs = references( [
     reference(n"C", joinpath(refpath, "C std.msa") ),
     reference(n"Ag", joinpath(refpath, "Ag std.msa") ),

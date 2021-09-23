@@ -1,6 +1,7 @@
-
 using HDF5: attributes, create_group, h5open
 using HDF5: File as h5file
+using NeXLCore
+
 """
    Base.write(h5::h5file, path::AbstractString, mats::AbstractArray{<:Material})
 
@@ -20,7 +21,7 @@ end
 
 
 """
-   Base.read(h5::h5file, path::AbstractString, ::Type{Material})
+   Base.read(h5::HDF5.File, path::AbstractString, ::Type{Material})
 
 Read an AbstractArray{<:Material} from an HDF5 file.
 """
@@ -29,6 +30,7 @@ function Base.read(h5::h5file, path::AbstractString, ::Type{Material})
     g = h5[path]
     els = map(el->parse(Element,el), read(attributes(g)["elements"]))
     data = g["massfractions"]
+    @assert length(els) == size(data,1) "The number of elements must match the depth of the mass-fractions data."
     return map(CartesianIndices(size(data)[2:end])) do ci
         massfracs = Dict(els[i] => data[i,ci] for i in 1:size(data,1))
         material("M$(ci.I)", filter(p->p.second>0.0, massfracs))

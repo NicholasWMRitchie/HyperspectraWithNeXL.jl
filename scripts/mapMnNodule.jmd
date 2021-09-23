@@ -13,14 +13,12 @@ the FWHM is assumed to equal 130.0 eV at Mn Kα.
 using DrWatson
 @quickactivate("HyperspectraWithNeXL")
 
-
+using HyperspectraWithNeXL
 using NeXLSpectrum
-using Gadfly
+using Gadfly, Unitful
 ```
 
 ```julia
-path = joinpath(datadir(),"exp_raw","Mn Nodule")
-
 lt = 0.72*4.0*18.0*3600.0/(1024*1024) # 18.0 hours on 4 detectors
 hs = NeXLSpectrum.compress(HyperSpectrum(
     LinearEnergyScale(0.0,10.0),
@@ -29,8 +27,10 @@ hs = NeXLSpectrum.compress(HyperSpectrum(
       :ProbeCurrent => 1.0, 
       :LiveTime => lt, 
       :BeamEnergy => 20.0e3, 
-      :Name => splitdir(path)[2]),
-    readrplraw(joinpath(path,"map[15]"))
+      :Name => "Mn Nodule"
+    ),
+    readrplraw(joinpath(datadep"MnNodule","map[15]")), 
+    fov = [ 4.096u"mm", 4.096u"mm"], offset= [ 0.0u"mm", 0.0u"mm" ]
 ))
 # Automatically generate a matching EDSDetector with a resolution of 132.0 eV at Mn Kα.
 hs[:Detector] = matching(hs, 132.0)
@@ -72,9 +72,11 @@ images. (see `roiimages(...)`)
 display.(hs[ [ n"Mn K-L3", n"Ca K-L3", n"Si K-L3", n"O K-L3" ] ]);
 ```
 
-To generate a RGB colorized image, index the `HyperSpectrum` with a tuple of three `CharXRay`.  This scales The
+To generate a RGB colorized image, index the `HyperSpectrum` with an index of two or three `CharXRay`.  This scales The
 element intensities relative to one another (like immediately above) and then assigns the intensities to 
 RGB in the order of the `CharXRay`.
 ```julia; fig_height=6; fig_width=6; fig_ext=".png";
-hs[ ( n"Mn K-L3", n"O K-L3", n"Si K-L3" ) ]
+hs[n"Mn K-L3", n"O K-L3", n"Si K-L3" ]
 ```
+
+NWMR 23-Sep-2021
