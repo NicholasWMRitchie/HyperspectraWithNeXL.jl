@@ -1,5 +1,6 @@
 module HyperspectraWithNeXL
 
+using DrWatson
 using Reexport
 using Downloads
 @reexport using DataDeps
@@ -11,6 +12,7 @@ custom_fetch(remote_filepath, local_directory) =
 
 # Register hyperspectral data and standards
 function __init__()
+    ENV["DATADEPS_LOAD_PATH"] = mkpath(joinpath(datadir(),"exp_raw"))
     register(DataDep("MnNodule",
         """
         Dataset: Deep sea manganese nodule electron excited X-ray microanalysis hyperspectral data set
