@@ -5,7 +5,10 @@
 # Folders to ignore - files may be too large, too many, etc. NOTE: EDIT IF NEEDED.
 videos
 plots
-data/exp_raw/Mn Nodule/*
+data/exp_raw/MnNodule/*
+data/exp_raw/MnNodule_Standards/*
+data/exp_pro/*
+
 #notebooks
 _research
 jl_*
