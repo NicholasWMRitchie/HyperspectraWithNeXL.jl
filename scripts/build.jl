@@ -3,8 +3,15 @@ using DrWatson
 using Weave
 
 using HyperspectraWithNeXL
+
+ENV["DATADEPS_ALWAYS_ACCEPT "] = true
 datadep"MnNodule"
 datadep"MnNodule_Standards"
+
+include("figure_maxpix.jl")
+include("figure_roimaps.jl")
+include("table_1.jl")
+include("table_krmap.jl")
 
 weave(joinpath(scriptsdir(), "quantify_k2496.jmd"), fig_ext=".svg")
 weave(joinpath(scriptsdir(), "kratiomapMnNodule.jmd"), fig_ext=".svg")
