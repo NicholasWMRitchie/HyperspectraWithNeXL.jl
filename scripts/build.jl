@@ -5,8 +5,10 @@ using Weave
 using HyperspectraWithNeXL
 
 ENV["DATADEPS_ALWAYS_ACCEPT "] = true
-datadep"MnNodule"
-datadep"MnNodule_Standards"
+println("""
+    The hyperspectrum data set and standards will be downloaded from a NIST file server the first time they are required.
+    The download is over 500 MB and requires an active Internet connection.
+    """)
 
 include("figure_maxpix.jl")
 include("figure_roimaps.jl")

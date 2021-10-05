@@ -22,6 +22,7 @@ using Unitful
 ```
 The read in the data from the RPL/RAW file.
 ```julia
+ENV["DATADEPS_ALWAYS_ACCEPT "] = true
 lt = 0.70*4.0*18.0*3600.0/(1024*1024) # 18.0 hours on 4 detectors
 hs = NeXLSpectrum.compress(HyperSpectrum(
     LinearEnergyScale(0.0,10.0),

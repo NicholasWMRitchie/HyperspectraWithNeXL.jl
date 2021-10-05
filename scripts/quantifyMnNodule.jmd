@@ -18,6 +18,7 @@ First we must load the necesary libraries.
 ```julia
 using DrWatson
 @quickactivate("HyperspectraWithNeXL")
+ENV["DATADEPS_ALWAYS_ACCEPT "] = true
 
 using HyperspectraWithNeXL
 using NeXLSpectrum # Spectrum, hyperspectrum and fitting
