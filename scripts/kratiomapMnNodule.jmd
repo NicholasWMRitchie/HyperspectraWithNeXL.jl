@@ -18,7 +18,7 @@ Load the hyperspectrum from a RPL/RAW file.
 ```julia
 # Load the HyperSpectrum from disk
 lt = 0.72*4.0*18.0*3600.0/(1024*1024) # 18.0 hours on 4 detectors
-ENV["DATADEPS_ALWAYS_ACCEPT "] = true
+ENV["DATADEPS_ALWAYS_ACCEPT"] = true
 hs = NeXLSpectrum.compress(HyperSpectrum(
     LinearEnergyScale(0.0,10.0),
     Dict{Symbol,Any}(
