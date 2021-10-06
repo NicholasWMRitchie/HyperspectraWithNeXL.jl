@@ -25,4 +25,6 @@ To (locally) reproduce this project, do the following:
    julia> include(joinpath(scriptsdir(),"build.jl"))
    ```
 
+   The script will download the hyperspectral data from a NIST-hosted website as necessary. The data is downloaded only once but is over 500 MB.  The data is downloaded to the "data/exp_raw" directory and consists of a RPL/RAW file pair, a pair of secondary and backscatter images and the necessary elemental standard spectra.
+
 Please direct any questions to nicholas.ritchie@nist.gov
