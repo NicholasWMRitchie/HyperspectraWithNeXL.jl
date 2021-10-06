@@ -14,9 +14,15 @@ To (locally) reproduce this project, do the following:
 1. Open a Julia console and do:
    ```
    julia> using Pkg
-   julia> Pkg.activate("path/to/this/project")
+   julia> Pkg.activate(raw"path/to/this/project")
    julia> Pkg.instantiate()
    ```
+2. The script "scripts\build.jl" will generate the outputs presented in the paper and a handful of other demonstrative scripts.
+   ```
+   julia> cd(raw"path/to/this/project")
+   julia> using DrWatson
+   julia> @quickactivate "HyperspectraWithNeXL"
+   julia> include(joinpath(scriptsdir(),"build.jl"))
+   ```
 
-This will install all necessary packages for you to be able to run the scripts and
-everything should work out of the box.
+Please direct any questions to nicholas.ritchie@nist.gov
