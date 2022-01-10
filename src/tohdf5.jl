@@ -29,11 +29,14 @@ function Base.read(h5::h5file, path::AbstractString, ::Type{Material})
     @assert haskey(h5, path)
     g = h5[path]
     els = map(el->parse(Element,el), read(attributes(g)["elements"]))
-    data = g["massfractions"]
+    tmp = g["massfractions"]
+    data = zeros(eltype(tmp), size(tmp)...)
+    copy!(data, tmp[axes(tmp)...])
+    tmp = nothing
     @assert length(els) == size(data,1) "The number of elements must match the depth of the mass-fractions data."
     return map(CartesianIndices(size(data)[2:end])) do ci
-        massfracs = Dict(els[i] => data[i,ci] for i in 1:size(data,1))
-        material("M$(ci.I)", filter(p->p.second>0.0, massfracs))
+        m = data[:, ci]
+        material("M$(ci.I)", Dict(els[i] => m[i] for i in filter(j -> m[j] > 0, eachindex(m))))
     end
 end
 

@@ -89,8 +89,10 @@ and reloaded rather than recalculated.
 Check the cache to see whether we've already computed the result.  If so load it, otherwise compute it.
 ```julia
 resultFile = joinpath(datadir(),"exp_pro","Mn Nodule.hdf5")
+mkpath(joinpath(datadir(),"exp_pro"))
 qrpath = "Quant Results"
 res = if isfile(resultFile)
+    hs, refs = nothing, nothing # Clear it from memory
     @info "Reading results from the cache."
     h5open(resultFile,"r") do h5
         read(h5, qrpath, Material)
@@ -98,6 +100,7 @@ res = if isfile(resultFile)
 else 
     @info "Computing k-ratios then mass-fractions. This will take a few hours..." 
     resf = @time fit_spectrum(hs, refs, mode = :Full)
+    hs, refs = nothing, nothing # Clear it from memory
     tmp = @time quantify(resf)
     # Now write the results to the cache
     h5open(resultFile,"w") do h5
@@ -129,6 +132,7 @@ Construct images with various different presentation of the elemental data - a r
 of all pixels with mass-fraction of `elm` > 0.1 and a Bright-style Log 3-band image.  Write these to disk as PNG images.
 ```julia; fig_height=6; fig_width=6; fig_ext=".svg";
 output = joinpath(papersdir(),"Figures", "Mn Nodule", "Quant")
+mkpath(output)
 # Convert low analytical totals (maybe voids?) to a null material.
 toblack(mat) = analyticaltotal(mat)<0.5 ? NeXLCore.NULL_MATERIAL : mat
 # Normalize the mass-fractions to [0.0, 1.0] while setting low totals to zero.

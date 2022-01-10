@@ -3,6 +3,7 @@ using DrWatson
 # Load the necessary libraries
 using NeXLSpectrum
 using Gadfly, DataFrames
+using PrettyTables
 # Load the unknown spectra from disk
 specpath = joinpath(datadir(),"exp_raw","K2496")
 k2496 = loadspectrum.(joinpath(specpath,"K2496_$(i).msa") for i in 1:3)
@@ -19,8 +20,19 @@ refs = references([
 # Fit the unknown spectra with the filtered references
 fs=fit_spectrum(k2496, refs)
 # Plot the raw spectrum and the residual
-display(plot(fs[1]))
+p = plot(fs[1])
+mkpath(joinpath(plotsdir(), "Table 1"))
+p |> SVG(joinpath(plotsdir(),"Table 1", "residual.svg"), 8inch, 3inch)
+display(p)
+
 # Matrix correct the k-ratios and tabulate the results
 q=quantify.(fs)
 nom = parse(Material, "0.323*O+0.2291*Si+0.018*Ti+0.4299*Ba",name="Nominal")
-asa(DataFrame, q, nominal=nom) # or `vcat( [ asa(DataFrame, qq) for qq in q ]...)`
+df = asa(DataFrame, q, nominal=nom) # or `vcat( [ asa(DataFrame, qq) for qq in q ]...)`
+
+open(joinpath(plotsdir(),"Table_1.tex"),"w") do io
+  pretty_table(io, df, backend = Val(:latex))
+end
+
+refs, fs, 
+df

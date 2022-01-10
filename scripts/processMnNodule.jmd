@@ -83,7 +83,7 @@ In Julia, gray-scale images are just matrices of numbers between 0.0 (black) and
 This maps very handily onto normalized k-ratios (or normalized compositions for that matter).
 ```julia
 bestks = optimizeks(SimpleKRatioOptimizer(2.0), resf)
-bestf = LinearAlgebra.normalize(bestks)
+bestf = normalizek(bestks)
 ```
 Next, we will create images to represent the k-ratio data. We will both
 store images to disk and display the images in the report.
@@ -102,7 +102,7 @@ loadlegend("Log3BandBright.png")
 ```
 
 ```julia; fig_height=10; fig_width=10; fig_ext=".svg";
-filt = LinearAlgebra.normalize(filter(k->!(element(k) in ( n"C", )), bestks))
+filt = normalizek(filter(k->!(element(k) in ( n"C", )), bestks))
 @time dv = DiluvianCluster(map(t->t.element, filt),map(t->t.kratios, filt), bin=x->floor(Integer, min(1.0, max(0.0, x)) * 10.0))
 display(labeledimage("Clustered Map Data", asimage(dv)))
 ```

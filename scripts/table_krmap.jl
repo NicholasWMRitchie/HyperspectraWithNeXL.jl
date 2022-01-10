@@ -3,7 +3,7 @@ using DrWatson
 # Load the necessary libraries
 using HyperspectraWithNeXL
 using NeXLSpectrum
-using Gadfly, LinearAlgebra
+using Gadfly
 using Images, FileIO, Unitful
 # Load the HyperSpectrum from disk
 lt = 0.72*4.0*18.0*3600.0/(1024*1024) # 18.0 hours on 4 detectors
@@ -19,6 +19,7 @@ hs = NeXLSpectrum.compress(HyperSpectrum(
     readrplraw(joinpath(datadep"MnNodule","map[15]")), 
     fov = [ 4.096u"mm", 4.096u"mm"], offset= [ 0.0u"mm", 0.0u"mm" ]
 ))
+# hs = hs[16:8:1024, 16:8:1024]
 # Build the fitting references
 refpath = datadep"MnNodule_Standards"
 refs = references( [
@@ -52,7 +53,19 @@ bestks = optimizeks(SimpleKRatioOptimizer(2.0), resf)
 # Convert compound k-ratios to pure element equivalents (matrix correction)
 pureks = aspure.(bestks)
 # Normalize the k-ratios at each point in the HyperSpectrum
-bestf = LinearAlgebra.normalize(pureks)
-# Display the resulting images
-labeledimages([ "$(bf.xrays)" for bf in bestf],[Log3Band.(bf.kratios) 
+bestf = normalizek(pureks)
+
+# Save the resulting images
+path = joinpath(plotsdir(),"Table K-ratio Map")
+mkpath(path)
+for bf in bestf
+  FileIO.save(File{format"PNG"}(joinpath(path,"k_norm[$(bf.xrays)].png")),Log3Band.(bf.kratios))
+end
+
+li = labeledimages([ "$(bf.xrays)" for bf in bestf],[Log3Band.(bf.kratios) 
                 for bf in bestf ], ncols=4)
+
+li |> SVG(joinpath(plotsdir(),"Labeled k-ratio maps.svg"), 8inch, 10inch)
+
+# Clean up
+hs, resf, bestks, pureks, bestf = nothing, nothing, nothing, nothing, nothing

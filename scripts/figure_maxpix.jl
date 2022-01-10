@@ -22,10 +22,14 @@ klms = [
     n"C", n"Ag", n"Al", n"Ca", n"Ce", n"Cl", n"Cr", n"Cu", n"Fe", n"S", 
     n"P", n"K", n"Mg", n"O", n"Mn", n"Na", n"Ni", n"Si", n"Ti", n"Zn" 
 ]
-vstack(
+set_default_plot_size(8inch, 3inch)
+p1 = vstack(
     plot(maxpixel(hs), klms=klms, xmax=10.0e3),
     plot(sum(hs), klms=klms, xmax=10.0e3)
-) |> PDF(joinpath(plotsdir(),"MaxPixel.pdf"), 6inch, 4inch)
+) 
+p1 |> PDF(joinpath(plotsdir(),"MaxPixel.pdf"), 6inch, 4inch)
+p1 |> SVG(joinpath(plotsdir(),"MaxPixel.svg"), 6inch, 4inch)
 
-plot(maxpixel(hs), sum(hs), klms=klms, xmax=10.0e3, norm=ScaleSum()) |> 
-    PDF(joinpath(plotsdir(),"MaxPixel2.pdf"), 8inch, 3inch)
+p2=plot(maxpixel(hs), sum(hs), klms=klms, xmax=10.0e3, norm=ScaleSum()) 
+p2 |> PDF(joinpath(plotsdir(),"MaxPixel2.pdf"), 8inch, 3inch)
+p2 |> SVG(joinpath(plotsdir(),"MaxPixel2.svg"), 8inch, 3inch)

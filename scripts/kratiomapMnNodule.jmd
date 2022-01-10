@@ -99,7 +99,7 @@ elemental data in a quantitative manner.
 ```julia; fig_height=10; fig_width=10; fig_ext=".svg";
 # Normalize the k-ratios for presentation
 pureks = aspure.(bestks)
-bestf = LinearAlgebra.normalize(pureks)
+bestf = normalizek(pureks)
 foreach(bestf) do bf
   FileIO.save(File(format"PNG", joinpath(output,"k[$(bf.xrays)][Linear].png")), LinearScale.(bf.kratios))
   FileIO.save(File(format"PNG", joinpath(output,"k[$(bf.xrays)][Log3].png")), Log3Band.(bf.kratios))
@@ -118,4 +118,9 @@ img
 img = bestks[n"Mn", n"O", n"Fe"]
 save(joinpath(output,"colorized[Mn,O,Fe,All].png"), img)
 img
+```
+
+```julia; echo=false
+# Clean up
+hs, refs, resf, bestks, bestf, pureks, img = nothing, nothing, nothing, nothing, nothing, nothing, nothing
 ```
