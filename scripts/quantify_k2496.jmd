@@ -95,13 +95,13 @@ For additional details about the entire measurement process including matrix cor
 ```julia
 df=mapreduce(i->asa(DataFrame, q[i]), append!, 1:3)  # Concatenate three results
 open(joinpath(papersdir(),"Tables", "k2496QuantResults.tex"),"w") do io
-  pretty_table(io, df, backend = Val(:latex), table_type=:tabular, nosubheader=true,
+  pretty_table(io, df, backend = Val(:latex), table_type=:tabular, nosubheader=true, 
+    formatters = ft_printf("%6.4f"), alignment = [ :l, :l, :l, :l, :c, :c, :c, :c, :c, :c, :c, :c, :c, :c ],
     title = raw"""
       Exhaustive quantitative analysis results from 3 measurements of K2496 glass based on the results from the script in Table \ref{lst:quant_script}.}
       The table contains information about the standard material, the peak selected as the optimal k-ratio for each element, mass-fractions, k-ratios and
       matrix correction factors.  The matrix correction factors include the standard $Z$ (atomic number), $A$ (absorption) and $F$ (characteristic secondary
-      fluorescence plus factors $g$, `Generation', to account for different beam energies between reference and unknown and $c$, `Coating' to account for 
-      absorption by a coating material.""",
+      fluorescence plus factors $g$ to account for different beam energies between reference and unknown and $c$ to account for absorption by a coating material.""",
     label = "tbl:K2496quant"
   )
 end

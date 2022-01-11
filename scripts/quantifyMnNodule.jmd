@@ -191,6 +191,12 @@ mt |> SVG(joinpath(output,"ClusterTernary.svg"), 8inch, 8inch)
 mt
 ```
 
+```julia; echo=false
+outpath = joinpath(papersdir(),"Figures", "Figure 12")
+mkpath(outpath)
+cp(joinpath(output,"ClusterTernary.svg"),joinpath(outpath,"ClusterTernary.svg"), force=true)
+```
+
 Plot the sum spectrum and a pixel mask. 
 ```julia; fig_height=3; fig_width=8; fig_ext=".svg";
 for i in cl
@@ -207,8 +213,6 @@ end
 
 ```julia; echo=false
 # Copy the figures for the paper
-outpath = joinpath(papersdir(),"Figures", "Figure 12")
-mkpath(outpath)
 for i in 1:4
     cp(joinpath(output,"SaM[Cluster $i].svg"), joinpath(outpath,"SaM[Cluster $i].svg"), force=true)
 end 
