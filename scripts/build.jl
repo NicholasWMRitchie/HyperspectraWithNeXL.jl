@@ -16,8 +16,8 @@ ENV["DATADEPS_ALWAYS_ACCEPT"] = true
 # To process individual files, set `doit=false` and comment `doit &&` out of the line you wish to process.
 doit=true
 
-mkpath(papersdir(),"Figures")
-mkpath(papersdir(),"Tables")
+mkpath(joinpath(papersdir(),"Figures"))
+mkpath(joinpath(papersdir(),"Tables"))
 mkpath(plotsdir())
 
 doit && include("table_k2496_quant.jl")
