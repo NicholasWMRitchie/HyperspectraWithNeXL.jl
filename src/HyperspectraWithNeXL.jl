@@ -2,7 +2,6 @@ module HyperspectraWithNeXL
 
 using DrWatson
 using Reexport
-using Downloads
 @reexport using DataDeps
 
 # Register hyperspectral data and standards

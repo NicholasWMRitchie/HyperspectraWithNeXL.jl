@@ -104,6 +104,14 @@ foreach(bestf) do bf
   FileIO.save(File(format"PNG", joinpath(output,"k[$(bf.xrays)][Linear].png")), LinearScale.(bf.kratios))
   FileIO.save(File(format"PNG", joinpath(output,"k[$(bf.xrays)][Log3].png")), Log3Band.(bf.kratios))
 end
+mkpath(joinpath(papersdir(),"Figures","Figure 8"))
+for fn in ( "k[C K-L2][Linear].png", "k[Cl K-L3 + 3 others][Linear].png","k[Mn K-L3 + 1 other][Linear].png","k[Fe K-L3 + 1 other][Linear].png" )
+  cp(joinpath(output,fn),joinpath(papersdir(),"Figures","Figure 8",fn), force=true)
+end
+mkpath(joinpath(papersdir(),"Figures","Figure 9"))
+for fn in ( "k[C K-L2][Log3].png", "k[Cl K-L3 + 3 others][Log3].png","k[Mn K-L3 + 1 other][Log3].png","k[Fe K-L3 + 1 other][Log3].png" )
+  cp(joinpath(output, fn), joinpath(papersdir(),"Figures","Figure 9",fn), force=true)
+end
 labeledimages(["$(bf.xrays)" for bf in bestf],[Log3Band.(bf.kratios) for bf in bestf], ncols=4)
 ```
 

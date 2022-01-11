@@ -20,15 +20,30 @@ hs = NeXLSpectrum.compress(HyperSpectrum(
     readrplraw(joinpath(datadep"MnNodule","map[15]")), 
     fov = [ 4.096u"mm", 4.096u"mm"], offset= [ 0.0u"mm", 0.0u"mm" ]
 ))
+outpath = joinpath(papersdir(),"Figures","Figure 5")
+mkpath(outpath)
+cp(joinpath(datadep"MnNodule","Image[0][[1]].png"), joinpath(outpath,"Mn_nodule_BSED.png"), force=true)
+
 # Independent normalization (to brightest pixel)
-FileIO.save(File{format"PNG"}(joinpath(plotsdir(),"ROI_I[Mn K-L3].png")), hs[n"Mn K-L3"])
-FileIO.save(File{format"PNG"}(joinpath(plotsdir(),"ROI_I[Fe K-L3].png")), hs[n"Fe K-L3"])
-FileIO.save(File{format"PNG"}(joinpath(plotsdir(),"ROI_I[O K-L3].png")), hs[n"O K-L3"])
+outpath = joinpath(papersdir(),"Figures","Figure 6")
+mkpath(outpath)
+FileIO.save(File{format"PNG"}(joinpath(outpath,"I[C K-L2].png")), hs[n"Mn K-L3"])
+FileIO.save(File{format"PNG"}(joinpath(outpath,"I[Mn K-L3].png")), hs[n"Mn K-L3"])
+FileIO.save(File{format"PNG"}(joinpath(outpath,"I[Fe K-L3].png")), hs[n"Fe K-L3"])
+FileIO.save(File{format"PNG"}(joinpath(outpath,"I[O K-L3].png")), hs[n"O K-L3"])
 # Normalized as a set (normalize to sum of intensities)
-imgs = hs[ [n"Mn K-L3", n"Fe K-L3", n"O K-L3" ] ]
-for (i, img) in enumerate(imgs)
-  FileIO.save(File{format"PNG"}(joinpath(plotsdir(),"ROI[$i].png")), img)
+
+outpath=plotsdir()
+mkpath(outpath)
+cxrs = [n"Mn K-L3", n"O K-L3", n"Fe K-L3" ]
+imgs = hs[ cxrs ]
+for (cxr, img) in zip(cxrs, imgs)
+  FileIO.save(File{format"PNG"}(joinpath(outpath,"I_rel[$cxr].png")), img)
 end
 # RGB 
-img = hs[ n"Mn K-L3", n"Fe K-L3", n"O K-L3"]
-FileIO.save(File{format"PNG"}(joinpath(plotsdir(),"ROI[Mn K-L3, Fe K-L3, O K-L3].png")), img)
+outpath = joinpath(papersdir(),"Figures","Figure 7")
+mkpath(outpath)
+img = colorize(hs, cxrs, :All)
+FileIO.save(File{format"PNG"}(joinpath(outpath,"colorized[Mn,O,Fe,All].png")), img)
+img = colorize(hs, cxrs, :Each)
+FileIO.save(File{format"PNG"}(joinpath(outpath,"colorized[Mn,O,Fe,Each].png")), img)

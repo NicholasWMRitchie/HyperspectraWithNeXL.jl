@@ -6,13 +6,17 @@ using DrWatson
 @quickactivate("HyperspectraWithNeXL")
 # Load the necessary NeXL libraries
 using NeXLSpectrum
+using PrettyTables
+# using Cairo, Fontconfig
 
 # Load 3rd party libraries for plotting and tabulation
 using Gadfly, DataFrames
 ENV["columns"]=400
 ```
 
-The material we are going to measure is a NIST-engineered glass containing Ba, Si, O and a small amount of Ti. The Ti K-lines are hidden by the Ba L-lines.
+The material we are going to measure is a NIST-engineered glass containing Ba, Si, O and a small amount 
+of Ti. The Ti K-lines are fully obstructed by the Ba L-lines and vice versa. Nominally, the composition 
+of this material is:
 ```julia
 k2496_mat = parse(Material,"0.323*O+0.2291*Si+0.018*Ti+0.4299*Ba",name="K2496 nominal")
 ```
@@ -46,13 +50,24 @@ refs = references([
   reference(n"O", joinpath(path,"MgO std.msa"), mat"MgO"),
   reference(n"C", joinpath(path,"C std.msa"), mat"C"),
   reference(n"Ti", joinpath(path,"Ti std.msa"), mat"Ti") ], det)
-asa(DataFrame, refs)
+df = asa(DataFrame, refs)
+mkpath(joinpath(papersdir(),"Tables"))
+open(joinpath(papersdir(),"Tables", "k2496refs.tex"),"w") do io
+  pretty_table(io, df, backend = Val(:latex), table_type=:tabular, nosubheader=true,
+    title = raw"The reference spectra and associated regions-of-interest (ROI) used to quantify the spectra shown in Table \ref{tbl:K2496quant}.",
+    label = "tbl:K2496refs"
+  )
+end
 ```
 #### K-ratios
 Fit the filtered fitting standards to the unknowns to extract the k-ratios. 
 ```julia; fig_width=8; fig_height=3; fig_ext=".svg"
 fs=fit_spectrum(k2496, refs)
-plot(fs[1])
+p = plot(fs[1])
+mkpath(joinpath(papersdir(), "Figures", "Figure 4"))
+# p |> PDF(joinpath(papersdir(),"Figures", "k2496residual.pdf"), 8inch, 3inch)
+p |> SVG(joinpath(papersdir(),"Figures", "Figure 4", "k2496residual.svg"), 8inch, 3inch)
+
 ```
 Tabulate the k-ratios and then summarize using the `describe(...)` function.
 ```julia
@@ -65,16 +80,32 @@ map(i->k2496[i][:Coating] = coatingasfilm(XPP, k2496_mat, parse(Material, "C", d
 ```
 
 #### Quantification
-Apply matrix correction algorithm (XPP by default) and tabulate the results comparing them with the nominal value.
+Apply matrix correction algorithm (XPP by default) and tabulate the results comparing them with the nominal value.  Specifying that 
+`coating = n"C K-L2"=>pure(n"C")` will use the k-ratio for this element to estimate the thickness of the coating of this material.
+That k-ratio will be removed from the fit as it is assumed to not be due to the unknown.
 ```julia
-q=quantify.(fs)
+q=quantify.(fs, coating = n"C K-L2"=>pure(n"C"))
+summary = asa(DataFrame, q)
+insertcols!(summary, 2, :Mode => fill("Fitting", nrow(summary)))
+
 asa(DataFrame, q, nominal=k2496_mat)
 ```
 
-For additional details about the entire measurement process including matrix correction factors, tabulate a single result item.
-Quantification details
+For additional details about the entire measurement process including matrix correction factors, convert a single result item using `asa(DataFrame,...)`.
 ```julia
-asa(DataFrame, q[1])
+df=mapreduce(i->asa(DataFrame, q[i]), append!, 1:3)  # Concatenate three results
+open(joinpath(papersdir(),"Tables", "k2496QuantResults.tex"),"w") do io
+  pretty_table(io, df, backend = Val(:latex), table_type=:tabular, nosubheader=true,
+    title = raw"""
+      Exhaustive quantitative analysis results from 3 measurements of K2496 glass based on the results from the script in Table \ref{lst:quant_script}.}
+      The table contains information about the standard material, the peak selected as the optimal k-ratio for each element, mass-fractions, k-ratios and
+      matrix correction factors.  The matrix correction factors include the standard $Z$ (atomic number), $A$ (absorption) and $F$ (characteristic secondary
+      fluorescence plus factors $g$, `Generation', to account for different beam energies between reference and unknown and $c$, `Coating' to account for 
+      absorption by a coating material.""",
+    label = "tbl:K2496quant"
+  )
+end
+df
 ```
 
 ## Method 2: Use Benitoite for Quantification
@@ -101,7 +132,13 @@ describe(asa(DataFrame, fs_restd1)[:, 2:end], :mean, :std)
 #### Quantify K2496 Against Benitoite 
 Apply matrix correction algorithm (XPP by default) and tabulate the results comparing them with the nominal value.
 ```julia
-q_restd1=quantify.(fs_restd1)
+q_restd1=quantify.(fs_restd1, coating = n"C K-L2"=>pure(n"C"))
+
+tmp = asa(DataFrame, q_restd1)
+insertcols!(tmp, 2, :Mode => fill("Benitoite", nrow(tmp)))
+summary = vcat(summary, tmp)
+
+
 asa(DataFrame, q_restd1, nominal=k2496_mat)
 ```
 
@@ -132,24 +169,53 @@ plot(fs_restd2[1])
 ```
 The quantification results for Ba and Ti are excellent but Si and O are less good.
 ```julia
-q_restd2=quantify.(fs_restd2)
+q_restd2=quantify.(fs_restd2, coating = n"C K-L2"=>pure(n"C"))
+
+tmp = asa(DataFrame, q_restd2)
+insertcols!(tmp, 2, :Mode => fill("Sanbornite", nrow(tmp)))
+summary = vcat(summary, tmp)
+push!(summary, ( "", "Nominal",	0.323,	0.2291,	0.018,	0.4299,	1.0 ))
+
 asa(DataFrame, q_restd2, nominal=k2496_mat)
 ```
 
 Using the O-by-stoichiometry stragegy to estimate the O mass-fraction still gives a low O content.
 ```julia
-q_restd2o=quantify.(fs_restd2, unmeasured=OByStoichiometry())
+q_restd2o=quantify.(fs_restd2, unmeasured=OByStoichiometry(), coating = n"C K-L2"=>pure(n"C"))
 asa(DataFrame, q_restd2o, nominal=k2496_mat)
 ```
 However, if we force C(Si) = 0.2291 and use O by stoichiometry, everything looks good. 
 ```julia
-q_restd2o=quantify.(fs_restd2, unmeasured=MultiUnmeasuredElementRule([ElementByFiat(n"Si",0.2291), OByStoichiometry()]))
+q_restd2o=quantify.(fs_restd2, unmeasured=MultiUnmeasuredElementRule([ElementByFiat(n"Si",0.2291), OByStoichiometry()]), coating = n"C K-L2"=>pure(n"C"))
 asa(DataFrame, q_restd2o, nominal=k2496_mat)
 ```
 
 Compare this to forcing Si and measuring O.
 ```julia
-q_restd2o=quantify.(fs_restd2, unmeasured=ElementByFiat(n"Si",0.2291))
+q_restd2o=quantify.(fs_restd2, unmeasured=ElementByFiat(n"Si",0.2291), coating = n"C K-L2"=>pure(n"C"))
 asa(DataFrame, q_restd2o, nominal=k2496_mat)
+```
+
+```julia
+summary
+```
+
+```julia
+using Statistics
+sumgb = groupby(summary,:Mode)
+
+final = combine(sumgb, :O=>mean=>:O, :Si=>mean=>:Si, :Ti=>mean=>:Ti, :Ba=>mean=>:Ba, :Total=>mean=>:Total)
+mkpath(joinpath(papersdir(), "Tables", "Table 4"))
+open(joinpath(papersdir(), "Tables", "Table 4", "K2496overview.tex"),"w") do io
+  pretty_table(io, final, nosubheader=true, backend=:latex, 
+            label="tbl:k2496over", alignment=[:l, :c, :c, :c, :c, :c ], formatters = ft_printf("%5.3f"),
+            title=raw"""
+            Mean quantification results (in mass fractions) from three spectra measured from K2496 glass.  The Nominal row contains the nominal 
+            composition of K2496 glass.  The Fitting row contains the estimated composition when quantified 
+            against simple fitting standards (\ce{MgO}, \ce{Si}, \ce{Ti}, \ce{BaCl2}).  The Benitoite and Sanbornite rows contain the estimate 
+            composition when quantified using these materials as similar standards for the elements \ce{O}, \ce{Si}, \ce{Ti} and \ce{Ba}."""
+  )
+end
+final
 ```
 NWMR

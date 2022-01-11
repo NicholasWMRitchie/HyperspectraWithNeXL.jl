@@ -5,30 +5,44 @@ using Weave
 using HyperspectraWithNeXL
 
 ENV["DATADEPS_ALWAYS_ACCEPT"] = true
-println("""
-    The hyperspectrum data set and standards will be downloaded from a NIST file server the first time they are required.
-    The download is over 500 MB and requires an active Internet connection.
-    """)
+@warn """
+    This script will download necessary data from a NIST file server the first time it is required.
+    This download is over 500 MB and will require an active Internet connection.
+    The data will be placed in the `joinpath(datadir(), "exp_raw") folder.  Outputs from the scripts
+    are placed in `plotsdir()`, `papersdir()` and intermediate files are placed in 
+    `joinpath(datadir(),"exp_pro")`
+    """
 
-include("figure_maxpix.jl")
-include("figure_roimaps.jl")
-include("table_1.jl")
-include("table_krmap.jl")
+# To process individual files, set `doit=false` and comment `doit &&` out of the line you wish to process.
+doit=true
 
-weave(joinpath(scriptsdir(), "quantify_k2496.jmd"), fig_ext=".svg")
-weave(joinpath(scriptsdir(), "kratiomapMnNodule.jmd"), fig_ext=".svg")
-weave(joinpath(scriptsdir(), "mapMnNodule.jmd"), fig_ext=".svg")
-weave(joinpath(scriptsdir(), "processMnNodule.jmd"), fig_ext=".svg")
-weave(joinpath(scriptsdir(), "quantifyMnNodule.jmd"), fig_ext=".svg")
+mkpath(papersdir(),"Figures")
+mkpath(papersdir(),"Tables")
+mkpath(plotsdir())
+
+doit && include("table_k2496_quant.jl")
+doit && include("figure_maxpix.jl")
+doit && include("figure_roimaps.jl")
+doit && include("table_krmap.jl")
+
+doit && weave(joinpath(scriptsdir(), "quantify_k2496.jmd"), fig_ext=".svg")
+doit && weave(joinpath(scriptsdir(), "kratiomapMnNodule.jmd"), fig_ext=".svg")
+doit && weave(joinpath(scriptsdir(), "mapMnNodule.jmd"), fig_ext=".svg")
+doit && weave(joinpath(scriptsdir(), "processMnNodule.jmd"), fig_ext=".svg")
 
 notebookspath() = joinpath(projectdir(), "notebooks")
 
-weave(joinpath(notebookspath(), "K2496_linearOfit.ipynb"), fig_ext=".svg")
-weave(joinpath(notebookspath(), "quant.ipynb"), fig_ext=".svg")
-weave(joinpath(notebookspath(), "quantifyK2496_Benitoite.ipynb"), fig_ext=".svg")
-weave(joinpath(notebookspath(), "quantifyK2496_Benitoite_c.ipynb"), fig_ext=".svg")
-weave(joinpath(notebookspath(), "quantifyK2496_stds_c.ipynb"), fig_ext=".svg")
-weave(joinpath(notebookspath(), "quantifyK2496_stds.ipynb"), fig_ext=".svg")
-weave(joinpath(notebookspath(), "quantifyK2496.ipynb"), fig_ext=".svg")
-weave(joinpath(notebookspath(), "suitability.ipynb"), fig_ext=".svg")
+doit && weave(joinpath(notebookspath(), "K2496_linearOfit.ipynb"), fig_ext=".svg")
+doit && weave(joinpath(notebookspath(), "quant.ipynb"), fig_ext=".svg")
+doit && weave(joinpath(notebookspath(), "quantifyK2496_Benitoite.ipynb"), fig_ext=".svg")
+doit && weave(joinpath(notebookspath(), "quantifyK2496_Benitoite_c.ipynb"), fig_ext=".svg")
+doit && weave(joinpath(notebookspath(), "quantifyK2496_stds_c.ipynb"), fig_ext=".svg")
+doit && weave(joinpath(notebookspath(), "quantifyK2496_stds.ipynb"), fig_ext=".svg")
+doit && weave(joinpath(notebookspath(), "quantifyK2496.ipynb"), fig_ext=".svg")
+doit && weave(joinpath(notebookspath(), "suitability.ipynb"), fig_ext=".svg")
 
+doit && weave(joinpath(scriptsdir(), "quantifyMnNodule.jmd"), fig_ext=".svg")
+
+using NeXLSpectrum: kill_weave_temporaries
+kill_weave_temporaries(scriptsdir())
+kill_weave_temporaries(notebookspath())

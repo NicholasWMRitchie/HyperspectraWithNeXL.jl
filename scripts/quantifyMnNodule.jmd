@@ -16,6 +16,8 @@ similarity even at disparite locations on the sample.
 
 First we must load the necesary libraries.
 ```julia
+@warn "This script uses a lot of memory.  It is known to run on a system with 64 GB of RAM and fail with an `OutOfMemoryError` on a system with 16 GB."
+
 using DrWatson
 @quickactivate("HyperspectraWithNeXL")
 ENV["DATADEPS_ALWAYS_ACCEPT"] = true
@@ -27,10 +29,10 @@ using NeXLParticle # Clustering
 using DataFrames # Tabulation
 using Images # Display
 using FileIO # Saving to disk
-using Gadfly # Plotting
+using Gadfly #, Cairo, Fontconfig # Plotting
 using LinearAlgebra # Normalization
 using Statistics # Stats like mean
-using Unitful # Adding dimensions to quantities
+using Unitful # Adding dimensions to the hyperspectrum axes (fov & offset)
 using HDF5 # Support for the HDF5 file type
 ```
 
@@ -41,9 +43,9 @@ hs = NeXLSpectrum.compress(HyperSpectrum(
     LinearEnergyScale(0.0,10.0),
     Dict{Symbol,Any}(
       :TakeOffAngle => deg2rad(35.0),
-      :ProbeCurrent => 1.0, 
+      :ProbeCurrent => 1.0, # nA
       :LiveTime => lt, 
-      :BeamEnergy => 20.0e3, 
+      :BeamEnergy => 20.0e3, # eV
       :Name => "Mn Nodule"
     ),
     readrplraw(joinpath(datadep"MnNodule","map[15]")), 
@@ -80,8 +82,9 @@ refs = references( [
     reference(n"Ti", joinpath(refpath, "Ti std.msa") ),
     reference(n"Zn", joinpath(refpath, "Zn std.msa") ) ], 132.0
 )
+elems = elms(refs)
 # Plot the max-pixel against the reference elements
-plot(maxpixel(hs), klms=elms(refs), xmax=10.0e3)
+plot(maxpixel(hs), klms=elems, xmax=10.0e3)
 ```
 Since this calculation can take hours and hours, the results, once calculated, are cached in a HDF5 file
 and reloaded rather than recalculated.
@@ -92,15 +95,13 @@ resultFile = joinpath(datadir(),"exp_pro","Mn Nodule.hdf5")
 mkpath(joinpath(datadir(),"exp_pro"))
 qrpath = "Quant Results"
 res = if isfile(resultFile)
-    hs, refs = nothing, nothing # Clear it from memory
-    @info "Reading results from the cache."
+    @warn "Reading results from the cache."
     h5open(resultFile,"r") do h5
         read(h5, qrpath, Material)
     end
 else 
-    @info "Computing k-ratios then mass-fractions. This will take a few hours..." 
+    @warn "Computing k-ratios then mass-fractions. This is likely to take a few hours..." 
     resf = @time fit_spectrum(hs, refs, mode = :Full)
-    hs, refs = nothing, nothing # Clear it from memory
     tmp = @time quantify(resf)
     # Now write the results to the cache
     h5open(resultFile,"w") do h5
@@ -131,13 +132,13 @@ extract(mats::AbstractArray{<:Material}, elm::Element) = map(m->NeXLUncertaintie
 Construct images with various different presentation of the elemental data - a regular gray-scale image, a Mask
 of all pixels with mass-fraction of `elm` > 0.1 and a Bright-style Log 3-band image.  Write these to disk as PNG images.
 ```julia; fig_height=6; fig_width=6; fig_ext=".svg";
-output = joinpath(papersdir(),"Figures", "Mn Nodule", "Quant")
+output = joinpath(plotsdir(), "Mn Nodule", "Quant")
 mkpath(output)
 # Convert low analytical totals (maybe voids?) to a null material.
 toblack(mat) = analyticaltotal(mat)<0.5 ? NeXLCore.NULL_MATERIAL : mat
 # Normalize the mass-fractions to [0.0, 1.0] while setting low totals to zero.
 resn = asnormalized.(toblack.(res))
-for elm in elms(refs)
+for elm in elems
     elmq = extract(resn, elm)
     # A regular gray-scale image representing each element
     FileIO.save(joinpath(output, "Quant[$(symbol(elm))][Linear].png"), Gray.(elmq))
@@ -147,8 +148,14 @@ for elm in elms(refs)
     FileIO.save(joinpath(output, "Quant[$(symbol(elm))][Log3band].png"), Log3Band.(elmq))
 end
 
+outpath =joinpath(papersdir(), "Figures", "Figure 10")
+mkpath(outpath)
+for fn in ( "Quant[C][Log3band].png", "Quant[Cl][Log3band].png", "Quant[Mn][Log3band].png", "Quant[Fe][Log3band].png")
+    cp(joinpath(output, fn), joinpath(outpath,fn), force=true)
+end
+
 # Construct Log 3-Band images and display them in this document.
-for (el, img) in map(el->( symbol(el), Log3Band.(extract(resn, el))), elms(refs))
+for (el, img) in map(el->( symbol(el), Log3Band.(extract(resn, el))), elems)
     display(labeledimage(el,img))
 end
 ```
@@ -160,10 +167,12 @@ colorview(RGB, extract(resn, n"Mn"), extract(resn,n"C"), extract(resn,n"O"))
 
 Cluster on composition rather than k-ratio.
 ```julia; fig_height=6; fig_width=6; fig_ext=".svg";
-els = elms(refs)
+els = elems
 dv = @time DiluvianCluster(els, map(el->extract(resn, el), els), bin=x->floor(Integer, min(1.0, max(0.0, x)) * 10.0))
 climg = asimage(dv)
-FileIO.save(joinpath(output, "ClusterMap.png"), climg)
+outpath = joinpath(papersdir(),"Figures","Figure 11")
+mkpath(outpath)
+FileIO.save(joinpath(outpath, "ClusterMap.png"), climg)
 labeledimage("Clustered Compositional Data", climg)
 ```
 
@@ -178,6 +187,7 @@ cl = collect(filter(i->count(dv,i)>100, eachindex(dv)))
 # Draw a multi-ternary diagram to summarize the compositions
 mt = multiternary(dv, cl; maxitems = 2500) 
 mt |> SVG(joinpath(output,"ClusterTernary.svg"), 8inch, 8inch)
+# mt |> PDF(joinpath(outpath,"ClusterTernary.pdf"), 8inch, 8inch)
 mt
 ```
 
@@ -189,10 +199,19 @@ for i in cl
     # Create a sum spectrum from those pixels
     cs = sum(hs, mask ,name="Cluster $i")
     # Plot the spectrum and the mask
-    pai = plotandimage(plot(cs, xmax=10.0e3, klms = elms(refs)), Gray.(mask))
+    pai = plotandimage(plot(cs, xmax=10.0e3, klms = elems), Gray.(mask))
     pai |> SVG(joinpath(output,"SaM[Cluster $i].svg"), 8inch, 3inch)
     display(pai)
 end
+```
+
+```julia; echo=false
+# Copy the figures for the paper
+outpath = joinpath(papersdir(),"Figures", "Figure 12")
+mkpath(outpath)
+for i in 1:4
+    cp(joinpath(output,"SaM[Cluster $i].svg"), joinpath(outpath,"SaM[Cluster $i].svg"), force=true)
+end 
 ```
 
 Summarize these classes in a table. `res[asmask(dv,i)]` constructs an array of the `Material`s from the

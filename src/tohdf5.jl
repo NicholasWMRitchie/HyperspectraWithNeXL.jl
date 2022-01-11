@@ -3,7 +3,7 @@ using HDF5: File as h5file
 using NeXLCore
 
 """
-   Base.write(h5::h5file, path::AbstractString, mats::AbstractArray{<:Material})
+   Base.write(h5::HDF5.File, path::AbstractString, mats::AbstractArray{<:Material})
 
 Write an AbstractArray{<:Material} to an HDF5 file.
 """
