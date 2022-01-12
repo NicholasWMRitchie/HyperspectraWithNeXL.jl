@@ -19,6 +19,7 @@ doit=true
 mkpath(joinpath(papersdir(),"Figures"))
 mkpath(joinpath(papersdir(),"Tables"))
 mkpath(plotsdir())
+mkpath(joinpath(datadir(),"exp_pro"))
 
 doit && include("table_k2496_quant.jl")
 doit && include("figure_maxpix.jl")
