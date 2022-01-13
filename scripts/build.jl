@@ -42,6 +42,8 @@ doit && weave(joinpath(notebookspath(), "quantifyK2496_stds.ipynb"), fig_ext=".s
 doit && weave(joinpath(notebookspath(), "quantifyK2496.ipynb"), fig_ext=".svg")
 doit && weave(joinpath(notebookspath(), "suitability.ipynb"), fig_ext=".svg")
 
+# Do a little cleanup before the main show!
+GC.gc(true)
 doit && weave(joinpath(scriptsdir(), "quantifyMnNodule.jmd"), fig_ext=".svg")
 
 using NeXLSpectrum: kill_weave_temporaries
