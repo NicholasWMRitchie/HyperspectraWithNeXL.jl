@@ -1019,8 +1019,6 @@ version = "0.3.1"
 [[deps.NeXLParticle]]
 deps = ["AxisArrays", "CSV", "CategoricalArrays", "Colors", "Compose", "CoordinateTransformations", "DataAPI", "DataDeps", "DataFrames", "DataStructures", "FileIO", "Images", "LinearAlgebra", "LoopVectorization", "NeXLCore", "NeXLMatrixCorrection", "NeXLSpectrum", "NeXLUncertainties", "OnlineStats", "OnlineStatsBase", "Optim", "Pkg", "Random", "Reexport", "Requires", "StaticArrays", "Statistics", "StatsBase", "StringEncodings", "ThreadsX"]
 git-tree-sha1 = "7db80f4fb46fb4d1728d982fbc9578fc1948f726"
-repo-rev = "master"
-repo-url = "https://github.com/usnistgov/NeXLParticle.jl"
 uuid = "9f92fee6-ed62-42c3-b009-0e4f934456c2"
 version = "0.1.0"
 
