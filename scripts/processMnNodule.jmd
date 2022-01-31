@@ -103,7 +103,7 @@ loadlegend("Log3BandBright.png")
 
 ```julia; fig_height=10; fig_width=10; fig_ext=".svg";
 filt = normalizek(filter(k->!(element(k) in ( n"C", )), bestks))
-@time dv = DiluvianCluster(map(t->t.element, filt),map(t->t.kratios, filt), bin=x->floor(Integer, min(1.0, max(0.0, x)) * 10.0))
+@time dv = DiluvianCluster(map(t->t.element, filt), map(t->t.kratios, filt), bin=x->floor(Integer, min(1.0, max(0.0, x)) * 10.0))
 display(labeledimage("Clustered Map Data", asimage(dv)))
 ```
 
@@ -126,8 +126,13 @@ Display the masked sum spectra and the associated mask image for each cluster.
 ```julia; fig_height=4; fig_width=10; fig_ext=".svg";
 for i in cl
     mask = asmask(dv,i)
-    cs = sum(hs, mask ,name="Cluster $i")
-    display(plotandimage(plot(cs, xmax=10.0e3, klms = elms(refs)),Gray.(mask)))
+    cs = sum(hs, mask, name="Cluster $i")
+    stats = clusterstats(dv, i)
+    # Only elms with k>0.05
+    celms = filter(lbl->stats[lbl][1]>0.05, dv.labels) 
+    # Only brightest lines
+    cxrs = mapreduce!(el->characteristic(el, alltransitions, 0.05), append!, celms)
+    display(plotandimage(plot(cs, xmax=10.0e3, klms = cxrs),Gray.(mask)))
 end
 nothing
 ```
