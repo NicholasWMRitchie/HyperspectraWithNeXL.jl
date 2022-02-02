@@ -19,6 +19,7 @@ using FileIO
 using Gadfly
 using LinearAlgebra
 using Unitful
+using OnlineStats
 ```
 The read in the data from the RPL/RAW file.
 ```julia
@@ -128,10 +129,10 @@ for i in cl
     mask = asmask(dv,i)
     cs = sum(hs, mask, name="Cluster $i")
     stats = clusterstats(dv, i)
-    # Only elms with k>0.05
-    celms = filter(lbl->stats[lbl][1]>0.05, dv.labels) 
+    # Only elms with k>0.005
+    celms = filter(lbl->OnlineStats.value(stats[lbl].stats[1])>0.005 , dv.labels) 
     # Only brightest lines
-    cxrs = mapreduce!(el->characteristic(el, alltransitions, 0.05), append!, celms)
+    cxrs = mapreduce(el->el==n"C" ? [ n"C K-L2" ] : characteristic(el, ( n"K-L3", n"K-M3", n"L3-M5", n"M5-N7" )), append!, celms)
     display(plotandimage(plot(cs, xmax=10.0e3, klms = cxrs),Gray.(mask)))
 end
 nothing

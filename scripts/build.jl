@@ -25,6 +25,7 @@ doit && include("table_k2496_quant.jl")
 doit && include("figure_maxpix.jl")
 doit && include("figure_roimaps.jl")
 doit && include("table_krmap.jl")
+doit && include("fes_fes2_figure.jl")
 
 doit && weave(joinpath(scriptsdir(), "quantify_k2496.jmd"), fig_ext=".svg")
 doit && weave(joinpath(scriptsdir(), "kratiomapMnNodule.jmd"), fig_ext=".svg")
